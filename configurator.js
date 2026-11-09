@@ -25,6 +25,9 @@ const LACING = 0.02;
 const SAME_RIG_DISTANCE = 1.0;
 const SAME_RIG_ANGLE = 15;
 const SHORT_SLING = 0.75;
+const FLOOR_MIRROR_HEIGHT = 0.6;
+const FLOOR_CLEARANCE = 0.15;
+const MIRROR_DEFAULTS = { mount: 'truss', x: 0, y: 4.5, z: 0, w: 2, d: 1.5, tilt: 0, yaw: 0, roll: 0, panel: 1 };
 const WHOLE_NUMBER_KEYS = new Set(['crowdCount', 'crossbeams']);
 const EFFECT_CLIP = 'media/undermirror_projection_fx.mp4';
 
@@ -102,6 +105,7 @@ const FIELDS = {
 		{ key: 'hFov', label: 'Horizontal field of view', unit: '°', step: 1, min: 5, max: 140 },
 	],
 	mirror: [
+		{ key: 'mount', label: 'Mounting', type: 'choice', options: [['truss', 'Hanging'], ['floor', 'Floor']] },
 		{ section: 'Position' },
 		{ key: 'x', label: 'Left / right', unit: 'm', step: 0.05 },
 		{ key: 'y', label: 'Centre height', unit: 'm', step: 0.05, min: 0 },
@@ -130,6 +134,7 @@ const HINTS = {
 	projector: 'W verplaatsen, E draaien. De lijnen laten zien waar het beeld via de spiegel landt.',
 	camera: 'W verplaatsen, E draaien. De gestippelde lijn is wat de camera via de spiegel ziet.',
 	mirror: 'W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
+	floorMirror: 'Spiegel op een vloerstatief. W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
 	dj: 'Sleep de booth over de vloer, E om te draaien.',
 };
 
@@ -185,7 +190,7 @@ function defaultSetup() {
 		truss: { x: 0, z: 0, w: round(spec.truss.hx * 2, 2), d: round(spec.truss.hz * 2, 2), height: spec.truss.frameY, size: spec.truss.size, crossbeams: 0, towers: true },
 		projector: { x: projectorPos[0], y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: spec.projector_fov, lumens: 10000 },
 		camera: { x: round(projectorPos[0] + 0.45, 2), y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: 60 },
-		mirrors: [{ id: 'm1', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], tilt: spec.mirror_tilt, yaw: 0, roll: 0, panel: spec.mirror_panel }],
+		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], tilt: spec.mirror_tilt, yaw: 0, roll: 0, panel: spec.mirror_panel }],
 		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
 		mounts: null,
 	};
@@ -214,7 +219,13 @@ function mergeSetup(setups) {
 	['venue', 'truss', 'projector', 'camera', 'dj'].forEach((key) => {
 		merged[key] = { ...base[key], ...(incoming[key] || {}) };
 	});
-	merged.mirrors = (incoming.mirrors && incoming.mirrors.length ? incoming.mirrors : base.mirrors).map((mirror, index) => ({ ...base.mirrors[0], ...mirror, id: mirror.id || `m${index + 1}` }));
+	// An empty mirror list is a valid setup, so only a missing list falls back to the defaults
+	merged.mirrors = (Array.isArray(incoming.mirrors) ? incoming.mirrors : base.mirrors).map((mirror, index) => ({
+		...MIRROR_DEFAULTS,
+		...mirror,
+		id: mirror.id || `m${index + 1}`,
+		mount: mirror.mount === 'floor' ? 'floor' : 'truss',
+	}));
 	merged.mounts = Array.isArray(incoming.mounts) ? incoming.mounts : null;
 	return merged;
 }
@@ -247,6 +258,14 @@ function mirrorName(mirror) {
 	return `Mirror ${state.setup.mirrors.indexOf(mirror) + 1}`;
 }
 
+function isFloorMirror(mirror) {
+	return mirror.mount === 'floor';
+}
+
+function hangingMirrors() {
+	return state.setup.mirrors.filter((mirror) => !isFloorMirror(mirror));
+}
+
 function selectedMirror() {
 	if (!state.selection.startsWith('mirror:')) {
 		return null;
@@ -265,13 +284,22 @@ function selectionData() {
 
 // Geometry helpers shared by the scene and the optics
 
+function mirrorFace(mirror) {
+	// Side of the mirror group (local Y) that reflects: down when hanging, up on a floor stand
+	return isFloorMirror(mirror) ? 1 : -1;
+}
+
+function mirrorEuler(mirror) {
+	// A positive tilt always turns the reflective face towards the projector (+Z), like the TouchDesigner Previz
+	return new THREE.Euler(mirrorFace(mirror) * mirror.tilt * DEG, mirror.yaw * DEG, mirror.roll * DEG, 'YXZ');
+}
+
 function mirrorFrame(mirror) {
-	// Mirror faces down (-Y) and tilts its +Z edge upwards, like the TouchDesigner Previz
-	const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(-mirror.tilt * DEG, mirror.yaw * DEG, mirror.roll * DEG, 'YXZ'));
+	const quaternion = new THREE.Quaternion().setFromEuler(mirrorEuler(mirror));
 	return {
 		id: mirror.id,
 		center: new THREE.Vector3(mirror.x, mirror.y, mirror.z),
-		normal: new THREE.Vector3(0, -1, 0).applyQuaternion(quaternion),
+		normal: new THREE.Vector3(0, mirrorFace(mirror), 0).applyQuaternion(quaternion),
 		axisU: new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion),
 		axisV: new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion),
 		halfU: mirror.w / 2,
@@ -471,6 +499,7 @@ const parts = {
 	crowd: new THREE.Group(),
 	truss: new THREE.Group(),
 	mirrors: new THREE.Group(),
+	stands: new THREE.Group(),
 	projector: new THREE.Group(),
 	camera: new THREE.Group(),
 	dj: new THREE.Group(),
@@ -503,6 +532,8 @@ effectTexture.colorSpace = THREE.SRGBColorSpace;
 function material(settings) {
 	return new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1, ...settings });
 }
+
+const standMaterial = material({ color: COLORS.truss, metalness: 0.8, roughness: 0.35 });
 
 function clearGroup(group) {
 	while (group.children.length) {
@@ -683,9 +714,9 @@ function mountWorld(point) {
 }
 
 function autoMounts(options = {}) {
-	// Picks the mounting point closest (in plan) to every mirror corner; options: { mirrors, keep }
+	// Picks the mounting point closest (in plan) to every hanging mirror corner; options: { mirrors, keep }
 	const chosen = new Set(options.keep ? state.setup.mounts || [] : []);
-	(options.mirrors || state.setup.mirrors).forEach((mirror) => {
+	(options.mirrors || state.setup.mirrors).filter((mirror) => !isFloorMirror(mirror)).forEach((mirror) => {
 		mirrorCorners(mirrorFrame(mirror)).forEach((corner) => {
 			let best = null;
 			state.mountPoints.forEach((point) => {
@@ -708,6 +739,8 @@ function buildMirror(mirror) {
 	const group = new THREE.Group();
 	group.rotation.order = 'YXZ';
 	group.userData.select = `mirror:${mirror.id}`;
+	// The reflective face points along local Y by `face`; backing and outline sit behind it
+	const face = mirrorFace(mirror);
 	const size = new THREE.Vector2();
 	renderer.getDrawingBufferSize(size);
 	const reflector = new Reflector(new THREE.PlaneGeometry(mirror.w, mirror.d), {
@@ -716,10 +749,10 @@ function buildMirror(mirror) {
 		textureHeight: Math.max(256, Math.round(size.y * 0.6)),
 		color: 0xb9c3cf,
 	});
-	reflector.rotation.x = Math.PI / 2;
+	reflector.rotation.x = -face * Math.PI / 2;
 	group.add(reflector);
 	const backing = new THREE.Mesh(new THREE.BoxGeometry(mirror.w, 0.025, mirror.d), material({ color: 0x3a3a46, roughness: 0.7 }));
-	backing.position.y = 0.016;
+	backing.position.y = -face * 0.016;
 	group.add(backing);
 
 	// Panel seams on the mirror face
@@ -728,17 +761,17 @@ function buildMirror(mirror) {
 	const rows = Math.max(1, Math.round(mirror.d / mirror.panel));
 	for (let i = 1; i < columns; i += 1) {
 		const x = -mirror.w / 2 + (mirror.w * i) / columns;
-		seams.push(x, -0.002, -mirror.d / 2, x, -0.002, mirror.d / 2);
+		seams.push(x, face * 0.002, -mirror.d / 2, x, face * 0.002, mirror.d / 2);
 	}
 	for (let j = 1; j < rows; j += 1) {
 		const z = -mirror.d / 2 + (mirror.d * j) / rows;
-		seams.push(-mirror.w / 2, -0.002, z, mirror.w / 2, -0.002, z);
+		seams.push(-mirror.w / 2, face * 0.002, z, mirror.w / 2, face * 0.002, z);
 	}
 	const seamGeometry = new THREE.BufferGeometry();
 	seamGeometry.setAttribute('position', new THREE.Float32BufferAttribute(seams, 3));
 	group.add(new THREE.LineSegments(seamGeometry, new THREE.LineBasicMaterial({ color: 0x0c0c10 })));
 	const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(mirror.w, 0.03, mirror.d)), new THREE.LineBasicMaterial({ color: COLORS.beamOut, transparent: true, opacity: 0.7 }));
-	outline.position.y = 0.012;
+	outline.position.y = -face * 0.012;
 	group.add(outline);
 	const tag = nameTag(mirrorName(mirror));
 	tag.position.set(-mirror.w / 2, 0.35, -mirror.d / 2);
@@ -823,8 +856,28 @@ function syncTransforms() {
 		const group = mirrorObjects.get(mirror.id);
 		if (!group || group === dragged) return;
 		group.position.set(mirror.x, mirror.y, mirror.z);
-		group.rotation.set(-mirror.tilt * DEG, mirror.yaw * DEG, mirror.roll * DEG, 'YXZ');
+		group.rotation.copy(mirrorEuler(mirror));
 		group.scale.set(1, 1, 1);
+	});
+}
+
+function updateStands() {
+	// Floor mirrors rest on a post with a round base, just behind the middle of the mirror
+	clearGroup(parts.stands);
+	state.setup.mirrors.filter(isFloorMirror).forEach((mirror) => {
+		const frame = mirrorFrame(mirror);
+		const top = frame.center.clone().addScaledVector(frame.normal, -0.04);
+		const stand = new THREE.Group();
+		stand.userData.select = `mirror:${mirror.id}`;
+		if (top.y > 0.05) {
+			const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, top.y, 10), standMaterial);
+			post.position.set(top.x, top.y / 2, top.z);
+			stand.add(post);
+		}
+		const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.03, 24), standMaterial);
+		base.position.set(top.x, 0.015, top.z);
+		stand.add(base);
+		parts.stands.add(stand);
 	});
 }
 
@@ -1034,7 +1087,7 @@ function updateCables() {
 	const mounts = state.mountPoints.filter((point) => selected.has(point.id)).map((point) => ({ id: point.id, world: mountWorld(point) }));
 	if (!mounts.length) return;
 	const positions = [];
-	state.setup.mirrors.forEach((mirror) => {
+	hangingMirrors().forEach((mirror) => {
 		mirrorCorners(mirrorFrame(mirror)).forEach((corner, index) => {
 			let best = null;
 			mounts.forEach((mount) => {
@@ -1106,7 +1159,7 @@ function updateMeasurements() {
 	groups.push({ title: 'Projector', rows: [
 		['Height', metres(projector.y)],
 		['Throw ratio', fmt(throwRatio)],
-		['Distance to mirror (centre)', metrics.toMirror ? metres(metrics.toMirror) : 'misses the mirror'],
+		['Distance to mirror (centre)', metrics.toMirror ? metres(metrics.toMirror) : (setup.mirrors.length ? 'misses the mirror' : 'no mirrors')],
 		['Mirror to floor (centre)', metrics.toFloor ? metres(metrics.toFloor) : '–'],
 		['Image on mirror', metrics.mirrorImage ? `${fmt(metrics.mirrorImage.w)} × ${fmt(metrics.mirrorImage.d)} m` : '–'],
 		['Image on floor', metrics.footprint ? `${fmt(metrics.footprint.w)} × ${fmt(metrics.footprint.d)} m` : '–'],
@@ -1124,10 +1177,12 @@ function updateMeasurements() {
 		const corners = mirrorCorners(mirrorFrame(mirror));
 		const heights = corners.map((corner) => corner.y);
 		const area = mirror.w * mirror.d;
+		const floor = isFloorMirror(mirror);
 		groups.push({ title: mirrorName(mirror), rows: [
+			['Mounting', floor ? 'floor stand' : 'hanging from the truss'],
 			['Centre height', metres(mirror.y)],
 			['Lowest / highest edge', `${fmt(Math.min(...heights))} / ${fmt(Math.max(...heights))} m`],
-			['Clearance over raised hands', metres(Math.min(...heights) - (venue.headHeight + ARMS_UP))],
+			floor ? ['Clearance over the floor', metres(Math.min(...heights))] : ['Clearance over raised hands', metres(Math.min(...heights) - (venue.headHeight + ARMS_UP))],
 			['Size', `${fmt(mirror.w)} × ${fmt(mirror.d)} m (${fmt(area, 1)} m²)`],
 			['Panels', `${Math.max(1, Math.round(mirror.w / mirror.panel))} × ${Math.max(1, Math.round(mirror.d / mirror.panel))}`],
 			['Weight acrylic 3 mm / glass 4 mm', `${fmt(area * ACRYLIC_KG_PER_M2, 0)} / ${fmt(area * GLASS_KG_PER_M2, 0)} kg`],
@@ -1155,6 +1210,11 @@ function collectWarnings() {
 	const handsUp = setup.venue.headHeight + ARMS_UP;
 	setup.mirrors.forEach((mirror) => {
 		const heights = mirrorCorners(mirrorFrame(mirror)).map((corner) => corner.y);
+		if (isFloorMirror(mirror)) {
+			if (Math.min(...heights) < 0) warnings.push(`${mirrorName(mirror)} goes ${metres(-Math.min(...heights))} into the floor. Raise it or tilt it less.`);
+			if (Math.abs(mirror.x) < setup.venue.crowdW / 2 && Math.abs(mirror.z) < setup.venue.crowdD / 2) warnings.push(`${mirrorName(mirror)} stands inside the crowd area.`);
+			return;
+		}
 		if (Math.min(...heights) < handsUp) {
 			warnings.push(`${mirrorName(mirror)} hangs as low as ${metres(Math.min(...heights))}. Raised hands reach about ${metres(handsUp)}.`);
 		}
@@ -1163,9 +1223,13 @@ function collectWarnings() {
 		}
 	});
 	if (metrics.blocked > 0.02) warnings.push(`${percent(metrics.blocked)} of the beam hits the back of a mirror.`);
-	if (metrics.onMirror < 0.5) warnings.push(`Only ${percent(metrics.onMirror)} of the beam reaches a mirror.`);
-	if (metrics.seenViaMirror < 0.5) warnings.push('The camera sees less than half of its view via the mirror.');
-	if (setup.mirrors.length && !(setup.mounts || []).length) warnings.push('No mounting points selected: select the truss and click the dots on it.');
+	if (!setup.mirrors.length) {
+		warnings.push('No mirrors placed yet. Add a hanging or a floor mirror under Objects.');
+	} else {
+		if (metrics.onMirror < 0.5) warnings.push(`Only ${percent(metrics.onMirror)} of the beam reaches a mirror.`);
+		if (metrics.seenViaMirror < 0.5) warnings.push('The camera sees less than half of its view via the mirror.');
+	}
+	if (hangingMirrors().length && !(setup.mounts || []).length) warnings.push('No mounting points selected: select the truss and click the dots on it.');
 	state.cables.filter((cable) => (cable.angle > 20 && cable.length > SHORT_SLING) || !cable.upward).forEach((cable) => warnings.push(`${cable.mirror} corner ${cable.corner}: the cable runs ${cable.upward ? `${fmt(cable.angle, 0)}° off vertical` : 'downwards'}.`));
 	const inCrowd = (device) => Math.abs(device.x) < setup.venue.crowdW / 2 && Math.abs(device.z) < setup.venue.crowdD / 2 && device.y < 2.5;
 	if (inCrowd(setup.projector)) warnings.push('The projector stands inside the crowd area at head height.');
@@ -1177,11 +1241,16 @@ function collectWarnings() {
 
 function exportData() {
 	const { setup, metrics } = state;
-	const mirror = setup.mirrors[0];
+	// The TouchDesigner Previz has one hanging mirror; the first one here fills its parameters
+	const hanging = hangingMirrors();
+	const floorMirrors = setup.mirrors.filter(isFloorMirror);
+	const mirror = hanging[0];
 	const notes = [];
-	const extraMirrors = setup.mirrors.length - 1;
-	if (extraMirrors > 0) notes.push(`The TouchDesigner Previz has one mirror; Mirror 1 is exported, the other ${extraMirrors === 1 ? 'one is' : `${extraMirrors} are`} in "setup".`);
-	if (mirror && (Math.abs(mirror.yaw) > 0.05 || Math.abs(mirror.roll) > 0.05)) notes.push('The Previz mirror only tilts; rotation and roll of Mirror 1 are not exported.');
+	if (!mirror) notes.push('There is no hanging mirror, so the Previz mirror parameters are left out.');
+	const extraMirrors = hanging.length - 1;
+	if (extraMirrors > 0) notes.push(`The TouchDesigner Previz has one mirror; ${mirrorName(mirror)} is exported, the other hanging ${extraMirrors === 1 ? 'mirror is' : `${extraMirrors} mirrors are`} in "setup".`);
+	if (floorMirrors.length) notes.push(`The Previz has no floor mirrors; ${floorMirrors.map(mirrorName).join(', ')} ${floorMirrors.length === 1 ? 'is' : 'are'} only in "setup".`);
+	if (mirror && (Math.abs(mirror.yaw) > 0.05 || Math.abs(mirror.roll) > 0.05)) notes.push(`The Previz mirror only tilts; rotation and roll of ${mirrorName(mirror)} are not exported.`);
 	const frame = mirror ? mirrorFrame(mirror) : null;
 	const halfX = frame ? Math.max(...mirrorCorners(frame).map((corner) => Math.abs(corner.x - mirror.x))) : 0;
 	const trussClear = Math.max(0, setup.truss.w / 2 - halfX - setup.truss.size / 2);
@@ -1205,10 +1274,9 @@ function exportData() {
 		Videocampos: [camera.x, camera.y, camera.z],
 		Videocamaim: r3(metrics.cameraAim),
 		Trusssize: setup.truss.size,
-		Trussclear: round(trussClear, 3),
 	};
 	if (mirror) {
-		Object.assign(previz, { Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: mirror.tilt, Mirrorpanel: mirror.panel });
+		Object.assign(previz, { Trussclear: round(trussClear, 3), Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: mirror.tilt, Mirrorpanel: mirror.panel });
 	}
 	return {
 		generator: 'Bossche Boiler setup configurator',
@@ -1261,7 +1329,7 @@ function downloadJson(data) {
 	const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 	const link = document.createElement('a');
 	link.href = URL.createObjectURL(blob);
-	link.download = 'bossche-boiler-setup.json';
+	link.download = `bossche-boiler-setup-${new Date().toISOString().slice(0, 10)}.json`;
 	link.click();
 	setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
@@ -1280,7 +1348,8 @@ function renderObjectList() {
 		button.addEventListener('click', () => select(key));
 		objectListEl.append(button);
 	});
-	document.getElementById('btnDelete').disabled = !selectedMirror() || state.setup.mirrors.length < 2;
+	document.getElementById('btnDelete').disabled = !selectedMirror();
+	document.getElementById('btnDeleteAll').disabled = !state.setup.mirrors.length;
 }
 
 function renderProps() {
@@ -1293,6 +1362,14 @@ function renderProps() {
 			heading.className = 'prop-section';
 			heading.textContent = field.section;
 			propsEl.append(heading);
+			return;
+		}
+		if (field.type === 'choice') {
+			const row = document.createElement('div');
+			row.className = 'prop';
+			const buttons = field.options.map(([value, label]) => `<button class="btn" data-choice="${field.key}" data-value="${value}" aria-pressed="${data[field.key] === value}">${label}</button>`).join('');
+			row.innerHTML = `<span class="prop-label">${field.label}</span><div class="prop-choice">${buttons}</div>`;
+			propsEl.append(row);
 			return;
 		}
 		if (field.type === 'check') {
@@ -1341,6 +1418,7 @@ function updatePropInputs() {
 		if (input.type === 'checkbox') input.checked = Boolean(data[input.dataset.key]);
 		else input.value = data[input.dataset.key];
 	});
+	propsEl.querySelectorAll('[data-choice]').forEach((button) => button.setAttribute('aria-pressed', String(data[button.dataset.choice] === button.dataset.value)));
 }
 
 function rebuildScopeFor(type) {
@@ -1365,6 +1443,40 @@ propsEl.addEventListener('change', (event) => {
 	}
 	refresh(rebuildScopeFor(type));
 });
+
+propsEl.addEventListener('click', (event) => {
+	const button = event.target.closest('[data-choice]');
+	if (!button) return;
+	const { type, data } = selectionData();
+	if (type === 'mirror' && button.dataset.choice === 'mount') {
+		setMirrorMount(data, button.dataset.value);
+		return;
+	}
+	data[button.dataset.choice] = button.dataset.value;
+	refresh(rebuildScopeFor(type));
+});
+
+function mirrorReach(mirror) {
+	// How far the corners reach below and above the mirror centre at its current tilt
+	const offsets = mirrorCorners(mirrorFrame({ ...mirror, y: 0 })).map((corner) => corner.y);
+	return { below: -Math.min(...offsets), above: Math.max(...offsets) };
+}
+
+function setMirrorMount(mirror, mount) {
+	// Moving a mirror between the truss and the floor also moves it to a sensible height
+	if (mirror.mount === mount) return;
+	mirror.mount = mount;
+	const reach = mirrorReach(mirror);
+	if (mount === 'floor') {
+		mirror.y = round(Math.max(FLOOR_MIRROR_HEIGHT, reach.below + FLOOR_CLEARANCE), 2);
+	} else {
+		const { truss } = state.setup;
+		mirror.y = round(truss.height - truss.size / 2 - 0.3 - reach.above, 2);
+		autoMounts({ mirrors: [mirror], keep: true });
+	}
+	refresh({ mirrors: true });
+	select(`mirror:${mirror.id}`);
+}
 
 // Selection and the gizmo
 
@@ -1406,8 +1518,8 @@ function configureGizmo() {
 
 function select(key) {
 	state.selection = key;
-	const { type } = selectionData();
-	hintEl.textContent = HINTS[type];
+	const { type, data } = selectionData();
+	hintEl.textContent = type === 'mirror' && isFloorMirror(data) ? HINTS.floorMirror : HINTS[type];
 	renderObjectList();
 	renderProps();
 	configureGizmo();
@@ -1438,7 +1550,7 @@ function readBack(object) {
 	if (type === 'projector' || type === 'camera') {
 		Object.assign(data, { x: round(p.x, 3), y: round(Math.max(0, p.y), 3), z: round(p.z, 3), pitch: round(r.x / DEG, 1), yaw: round(r.y / DEG, 1), roll: round(r.z / DEG, 1) });
 	} else if (type === 'mirror') {
-		Object.assign(data, { x: round(p.x, 3), y: round(p.y, 3), z: round(p.z, 3), tilt: round(-r.x / DEG, 1), yaw: round(r.y / DEG, 1), roll: round(r.z / DEG, 1) });
+		Object.assign(data, { x: round(p.x, 3), y: round(p.y, 3), z: round(p.z, 3), tilt: round((mirrorFace(data) * r.x) / DEG, 1), yaw: round(r.y / DEG, 1), roll: round(r.z / DEG, 1) });
 	} else if (type === 'truss') {
 		Object.assign(data, { x: round(p.x, 3), z: round(p.z, 3) });
 		object.position.y = 0;
@@ -1483,7 +1595,7 @@ renderer.domElement.addEventListener('pointerup', (event) => {
 	const bounds = renderer.domElement.getBoundingClientRect();
 	const ndc = new THREE.Vector2(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1);
 	raycaster.setFromCamera(ndc, camera);
-	const targets = [parts.projector, parts.camera, parts.dj, parts.truss, parts.mirrors];
+	const targets = [parts.projector, parts.camera, parts.dj, parts.truss, parts.mirrors, parts.stands];
 	const hits = raycaster.intersectObjects(targets, true);
 	// With the truss selected, a mounting point wins over the truss tubes right above it
 	const mountHit = state.selection === 'truss' ? hits.find((item) => item.object.userData.isMounts) : null;
@@ -1539,28 +1651,50 @@ function applyToggles() {
 	});
 }
 
-document.getElementById('btnAddMirror').addEventListener('click', () => {
+function nextMirrorId() {
 	const ids = state.setup.mirrors.map((mirror) => Number(mirror.id.slice(1)) || 0);
-	const id = `m${Math.max(0, ...ids) + 1}`;
-	// New mirrors appear beside the truss so they are easy to see and grab
-	const { truss } = state.setup;
-	const mirror = { id, x: round(truss.x + truss.w / 2 + 1.5, 2), y: 3.5, z: round(truss.z, 2), w: 2, d: 1.5, tilt: 0, yaw: 0, roll: 0, panel: 1 };
-	state.setup.mirrors.push(mirror);
-	autoMounts({ mirrors: [mirror], keep: true });
+	return `m${Math.max(0, ...ids) + 1}`;
+}
+
+function addMirror(mirror) {
+	state.setup.mirrors.push({ ...MIRROR_DEFAULTS, ...mirror, id: nextMirrorId() });
+	const added = state.setup.mirrors[state.setup.mirrors.length - 1];
+	if (!isFloorMirror(added)) autoMounts({ mirrors: [added], keep: true });
 	refresh({ mirrors: true });
-	select(`mirror:${id}`);
+	select(`mirror:${added.id}`);
+}
+
+// New mirrors appear beside the truss, hanging ones on the right and floor ones on the left, so they are easy to see and grab
+document.getElementById('btnAddMirror').addEventListener('click', () => {
+	const { truss } = state.setup;
+	addMirror({ mount: 'truss', x: round(truss.x + truss.w / 2 + 1.5, 2), y: 3.5, z: round(truss.z, 2) });
+});
+
+document.getElementById('btnAddFloorMirror').addEventListener('click', () => {
+	const { truss, venue } = state.setup;
+	addMirror({ mount: 'floor', x: round(Math.max(-venue.floorW / 2 + 1, truss.x - truss.w / 2 - 1.2), 2), y: FLOOR_MIRROR_HEIGHT, z: round(truss.z, 2), w: 1.5, d: 1 });
 });
 
 function deleteSelectedMirror() {
 	const mirror = selectedMirror();
-	if (!mirror || state.setup.mirrors.length < 2) return;
-	state.setup.mirrors = state.setup.mirrors.filter((item) => item !== mirror);
-	transform.detach();
-	refresh({ mirrors: true });
+	if (!mirror) return;
+	// Move the selection off the mirror before it disappears, the panel reads from it
 	select('projector');
+	state.setup.mirrors = state.setup.mirrors.filter((item) => item !== mirror);
+	refresh({ mirrors: true });
 }
 
 document.getElementById('btnDelete').addEventListener('click', deleteSelectedMirror);
+
+document.getElementById('btnDeleteAll').addEventListener('click', () => {
+	if (!state.setup.mirrors.length || !window.confirm('Alle spiegels verwijderen?')) return;
+	if (selectedMirror()) select('projector');
+	state.setup.mirrors = [];
+	// The picked mounting points belonged to these mirrors
+	state.setup.mounts = [];
+	refresh({ mirrors: true });
+	showToast('Alle spiegels verwijderd');
+});
 
 document.getElementById('btnReset').addEventListener('click', () => {
 	if (!window.confirm('Alle wijzigingen terugzetten naar de previz-opstelling?')) return;
@@ -1587,7 +1721,9 @@ importInput.addEventListener('change', async () => {
 	if (!file) return;
 	try {
 		const data = JSON.parse(await file.text());
-		state.setup = mergeSetup({ base: defaultSetup(), incoming: data.setup || data });
+		const incoming = data && (data.setup || data);
+		if (!incoming || !(incoming.projector || incoming.truss || Array.isArray(incoming.mirrors))) throw new Error('No setup in this file');
+		state.setup = mergeSetup({ base: defaultSetup(), incoming });
 		refresh({ venue: true, truss: true, mirrors: true, dj: true });
 		select('projector');
 		showToast(`Setup geladen uit ${file.name}`);
@@ -1614,6 +1750,7 @@ function refresh(scope) {
 	if (scope.dj) buildDj();
 	colourMounts();
 	syncTransforms();
+	updateStands();
 	updateCables();
 	updateOptics();
 	updateMeasurements();

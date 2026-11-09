@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css?v=6">
-<link rel="stylesheet" href="configurator.css?v=3">
+<link rel="stylesheet" href="configurator.css?v=4">
 <script type="importmap">
 {
 	"imports": {
@@ -77,8 +77,10 @@
 				<h2 class="panel-title">Objects</h2>
 				<div class="object-list" id="objectList"></div>
 				<div class="side-row">
-					<button class="btn" id="btnAddMirror">Add mirror</button>
+					<button class="btn" id="btnAddMirror">Add hanging mirror</button>
+					<button class="btn" id="btnAddFloorMirror">Add floor mirror</button>
 					<button class="btn" id="btnDelete">Delete mirror</button>
+					<button class="btn" id="btnDeleteAll">Delete all mirrors</button>
 				</div>
 			</div>
 		</div>
@@ -101,7 +103,7 @@
 		<div class="bezel">
 			<div class="bezel-core side-block">
 				<h2 class="panel-title">Setup</h2>
-				<p class="side-note">Je setup wordt automatisch bewaard in deze browser. Met Export JSON neem je hem mee naar TouchDesigner of naar iemand anders.</p>
+				<p class="side-note">Je setup wordt automatisch bewaard in deze browser. Met Export JSON (rechtsboven) neem je hem mee naar TouchDesigner of naar iemand anders; met Import laad je zo'n bestand weer in.</p>
 				<div class="side-row">
 					<button class="btn" id="btnReset">Reset to previz</button>
 				</div>
@@ -113,6 +115,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="spec.js?v=2"></script>
-<script type="module" src="configurator.js?v=6"></script>
+<script type="module" src="configurator.js?v=9"></script>
 </body>
 </html>

@@ -295,9 +295,22 @@
 	gap: 8px;
 }
 
-.prop label {
+.prop label,
+.prop-label {
 	color: var(--soft);
 	font-size: 0.82rem;
+}
+
+/* Two-way switch, such as hanging or floor mirror */
+.prop-choice {
+	grid-column: 2 / 4;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+}
+
+.prop-choice .btn {
+	height: 32px;
 }
 
 .prop input[type="number"] {
