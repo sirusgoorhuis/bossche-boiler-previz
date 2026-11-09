@@ -4,6 +4,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 // v2 since the house default replaced the Previz setup; v1 saves held the old default
 const STORAGE_KEY = 'bb-configurator-v2';
@@ -31,12 +34,18 @@ const FLOOR_CLEARANCE = 0.15;
 const MIRROR_DEFAULTS = { mount: 'truss', x: 0, y: 4.5, z: 0, w: 2, d: 1.5, tilt: 0, yaw: 0, roll: 0, panel: 1 };
 const WHOLE_NUMBER_KEYS = new Set(['crowdCount', 'crossbeams']);
 const EFFECT_CLIP = 'media/undermirror_projection_fx.mp4';
+const ORTHO_HEIGHT = 20;
+const ORTHO_DISTANCE = 40;
+const FLIGHT_MS = 650;
 
+// Viewpoints as a direction from the target plus a viewing distance; isometric mode turns the distance into a zoom.
+// Every direction stays inside the orbit tilt limit, otherwise a flight could never arrive.
 const VIEW_PRESETS = {
-	perspective: { position: [12.5, 2.6, 14.5], target: [0, 3.4, -0.5] },
-	top: { position: [0, 28, 0.01], target: [0, 0, 0] },
-	side: { position: [17, 3.2, 0.5], target: [0, 3, 0.5] },
-	front: { position: [0, 3.6, 16.5], target: [0, 3.2, 0] },
+	overview: { direction: [12.5, 1.6, 15], target: [0, 3, -0.5], distance: 19.6 },
+	iso: { direction: [1, 1, 1], target: [0, 2, -0.5], distance: 21 },
+	top: { direction: [0, 1, 0.001], target: [0, 0, 0], distance: 28 },
+	side: { direction: [1, 0.02, 0], target: [0, 3, 0.5], distance: 17 },
+	front: { direction: [0, 0.03, 1], target: [0, 3.2, 0], distance: 16.5 },
 };
 
 const COLORS = {
@@ -46,7 +55,8 @@ const COLORS = {
 	walls: 0x34343e,
 	beamIn: 0xcdb8ff,
 	beamOut: 0x8fe7ff,
-	camera: 0xffffff,
+	cameraView: 0xff9f43,
+	line: 0xffffff,
 	truss: 0x9a9aa6,
 	mount: 0x5d5d68,
 	mountOn: 0xffd27a,
@@ -133,7 +143,8 @@ const HINTS = {
 	venue: 'Zaal en publiek. Pas de maten aan in het paneel.',
 	truss: 'Sleep om de truss te verplaatsen. Klik de bolletjes op de truss om ophangpunten aan of uit te zetten.',
 	projector: 'W verplaatsen, E draaien. De lijnen laten zien waar het beeld via de spiegel landt.',
-	camera: 'W verplaatsen, E draaien. De gestippelde lijn is wat de camera via de spiegel ziet.',
+	camera: 'W verplaatsen, E draaien. Oranje is wat de camera ziet, ook via de spiegel.',
+	cameraOff: 'De camera staat uit (Use camera). De projector toont dan een kleurrijk testbeeld.',
 	mirror: 'W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
 	floorMirror: 'Spiegel op een vloerstatief. W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
 	dj: 'Sleep de booth over de vloer, E om te draaien.',
@@ -152,11 +163,13 @@ const state = {
 	setup: loadSetup(),
 	selection: 'projector',
 	mode: 'translate',
-	toggles: { snap: true, beam: true, cameraView: true, crowd: true, labels: true },
+	toggles: { snap: true, beam: true, solid: false, cameraView: true, crowd: true, labels: true },
+	projection: 'perspective',
+	view: 'overview',
+	flight: null,
 	metrics: null,
 	cables: [],
 	mountPoints: [],
-	viewTarget: null,
 };
 
 // Setup data
@@ -190,7 +203,7 @@ function previzSetup() {
 		venue: { floorW: spec.floor[0], floorD: spec.floor[1], wallH: spec.wallheight, crowdW: spec.crowd_area[0], crowdD: spec.crowd_area[1], crowdCount: spec.crowd_count, headHeight: 1.7 },
 		truss: { x: 0, z: 0, w: round(spec.truss.hx * 2, 2), d: round(spec.truss.hz * 2, 2), height: spec.truss.frameY, size: spec.truss.size, crossbeams: 0, towers: true },
 		projector: { x: projectorPos[0], y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: spec.projector_fov, lumens: 10000 },
-		camera: { x: round(projectorPos[0] + 0.45, 2), y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: 60 },
+		camera: { enabled: true, x: round(projectorPos[0] + 0.45, 2), y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: 60 },
 		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], tilt: spec.mirror_tilt, yaw: 0, roll: 0, panel: spec.mirror_panel }],
 		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
 		mounts: null,
@@ -376,7 +389,26 @@ function nearestMirrorHit(ray) {
 }
 
 /**
- * Follows a ray through the mirrors until it reaches the floor.
+ * Where a ray leaves the room: the floor, or a wall below the wall height (there is no ceiling, so it can pass over a wall).
+ * Ray object: { origin, dir }
+ */
+function roomExit(ray) {
+	const { floorW, floorD, wallH } = state.setup.venue;
+	const { origin, dir } = ray;
+	let best = { distance: dir.y < -1e-6 ? -origin.y / dir.y : Infinity, surface: 'floor' };
+	// Walls only stop rays that start inside the room
+	if (Math.abs(origin.x) > floorW / 2 || Math.abs(origin.z) > floorD / 2) return best;
+	[['x', floorW / 2], ['z', floorD / 2]].forEach(([axis, half]) => {
+		if (Math.abs(dir[axis]) < 1e-6) return;
+		const side = Math.sign(dir[axis]);
+		const distance = (side * half - origin[axis]) / dir[axis];
+		if (distance < best.distance && origin.y + dir.y * distance <= wallH) best = { distance, surface: `${axis}${side > 0 ? '+' : '-'}` };
+	});
+	return best;
+}
+
+/**
+ * Follows a ray through the mirrors until it lands on the floor or a wall.
  * Ray object: { origin, dir, frames }
  */
 function traceRay(ray) {
@@ -388,11 +420,11 @@ function traceRay(ray) {
 	let mirrorPoint = null;
 	for (let bounce = 0; bounce <= MAX_BOUNCES; bounce += 1) {
 		const hit = nearestMirrorHit({ origin, dir, frames: ray.frames, skipId });
-		const floorDistance = dir.y < -1e-6 ? -origin.y / dir.y : Infinity;
-		if (hit && hit.distance < floorDistance) {
+		const exit = roomExit({ origin, dir });
+		if (hit && hit.distance < exit.distance) {
 			points.push(hit.point);
 			if (!hit.front) {
-				return { points, floor: null, mirrorId, mirrorPoint, blocked: true };
+				return { points, floor: null, land: null, mirrorId, mirrorPoint, blocked: true };
 			}
 			mirrorId = mirrorId || hit.id;
 			mirrorPoint = mirrorPoint || hit.point;
@@ -401,15 +433,23 @@ function traceRay(ray) {
 			skipId = hit.id;
 			continue;
 		}
-		if (floorDistance < MAX_RAY_LENGTH) {
-			const floor = origin.clone().addScaledVector(dir, floorDistance);
-			points.push(floor);
-			return { points, floor, mirrorId, mirrorPoint, blocked: false };
+		if (exit.distance < MAX_RAY_LENGTH) {
+			const point = origin.clone().addScaledVector(dir, exit.distance);
+			points.push(point);
+			return { points, floor: exit.surface === 'floor' ? point : null, land: { point, surface: exit.surface }, mirrorId, mirrorPoint, blocked: false };
 		}
 		points.push(origin.clone().addScaledVector(dir, 4));
 		break;
 	}
-	return { points, floor: null, mirrorId, mirrorPoint, blocked: false };
+	return { points, floor: null, land: null, mirrorId, mirrorPoint, blocked: false };
+}
+
+function lifted(land, lift) {
+	// A landing point moved just off its floor or wall, into the room, so drawings on it do not flicker
+	const point = land.point.clone();
+	if (land.surface === 'floor') point.y = lift;
+	else point[land.surface[0]] -= (land.surface[1] === '+' ? 1 : -1) * lift;
+	return point;
 }
 
 function boundaryPixels() {
@@ -483,13 +523,18 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(COLORS.background);
 scene.fog = new THREE.Fog(COLORS.background, 40, 90);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 200);
-camera.position.set(...VIEW_PRESETS.perspective.position);
+// Perspective to look around; orthographic for isometric mode, where sizes stay the same across the room
+const perspectiveCamera = new THREE.PerspectiveCamera(45, 1, 0.05, 200);
+const isoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+let camera = perspectiveCamera;
+const fog = scene.fog;
 
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enableDamping = true;
-orbit.target.set(...VIEW_PRESETS.perspective.target);
 orbit.maxPolarAngle = Math.PI * 0.495;
+orbit.minZoom = 0.2;
+orbit.maxZoom = 12;
+placeCamera(viewFor(VIEW_PRESETS.overview));
 
 const transform = new TransformControls(camera, renderer.domElement);
 transform.setSize(0.8);
@@ -535,11 +580,48 @@ effectVideo.play().catch(() => {});
 const effectTexture = new THREE.VideoTexture(effectVideo);
 effectTexture.colorSpace = THREE.SRGBColorSpace;
 
+function makeTestPattern() {
+	// Colourful stand-in for the effect when no camera feeds it: a hue sweep with a grid, so stretch and keystone show on the floor
+	const canvas = document.createElement('canvas');
+	canvas.width = 640;
+	canvas.height = 360;
+	const context = canvas.getContext('2d');
+	const hues = context.createLinearGradient(0, 0, canvas.width, 0);
+	for (let k = 0; k <= 6; k += 1) hues.addColorStop(k / 6, `hsl(${k * 60}, 95%, 58%)`);
+	context.fillStyle = hues;
+	context.fillRect(0, 0, canvas.width, canvas.height);
+	const shade = context.createLinearGradient(0, 0, 0, canvas.height);
+	shade.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+	shade.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
+	context.fillStyle = shade;
+	context.fillRect(0, 0, canvas.width, canvas.height);
+	context.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+	context.lineWidth = 3;
+	context.beginPath();
+	for (let x = 0; x <= 16; x += 1) {
+		context.moveTo((canvas.width * x) / 16, 0);
+		context.lineTo((canvas.width * x) / 16, canvas.height);
+	}
+	for (let y = 0; y <= 9; y += 1) {
+		context.moveTo(0, (canvas.height * y) / 9);
+		context.lineTo(canvas.width, (canvas.height * y) / 9);
+	}
+	context.moveTo(canvas.width / 2 + canvas.height * 0.3, canvas.height / 2);
+	context.arc(canvas.width / 2, canvas.height / 2, canvas.height * 0.3, 0, Math.PI * 2);
+	context.stroke();
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	return texture;
+}
+
+const testPattern = makeTestPattern();
+
 function material(settings) {
 	return new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1, ...settings });
 }
 
 const standMaterial = material({ color: COLORS.truss, metalness: 0.8, roughness: 0.35 });
+const mirrorFaceMaterial = material({ color: 0x8d9db0, metalness: 0.85, roughness: 0.18 });
 
 function clearGroup(group) {
 	while (group.children.length) {
@@ -757,6 +839,13 @@ function buildMirror(mirror) {
 	});
 	reflector.rotation.x = -face * Math.PI / 2;
 	group.add(reflector);
+	// Reflector only clips correctly for a perspective camera, so isometric mode shows a plain mirror face instead
+	const flat = new THREE.Mesh(new THREE.PlaneGeometry(mirror.w, mirror.d), mirrorFaceMaterial);
+	flat.rotation.x = reflector.rotation.x;
+	group.add(flat);
+	group.userData.reflector = reflector;
+	group.userData.flat = flat;
+	showMirrorFace(group);
 	const backing = new THREE.Mesh(new THREE.BoxGeometry(mirror.w, 0.025, mirror.d), material({ color: 0x3a3a46, roughness: 0.7 }));
 	backing.position.y = -face * 0.016;
 	group.add(backing);
@@ -784,6 +873,11 @@ function buildMirror(mirror) {
 	group.add(tag);
 	parts.mirrors.add(group);
 	mirrorObjects.set(mirror.id, group);
+}
+
+function showMirrorFace(group) {
+	group.userData.reflector.visible = !camera.isOrthographicCamera;
+	group.userData.flat.visible = camera.isOrthographicCamera;
 }
 
 function buildMirrors() {
@@ -895,57 +989,76 @@ function updateStands() {
 
 // Optics: the projector beam and the camera view, traced through the mirrors
 
+const fatLineResolution = new THREE.Vector2(1, 1);
+
 function lineSegmentsFrom(segments) {
-	// Segments object: { positions, colours, opacity, dashed }
+	// Segments object: { positions, colours, opacity }
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(segments.positions, 3));
 	if (segments.colours) {
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(segments.colours, 3));
 	}
-	const lineMaterial = segments.dashed
-		? new THREE.LineDashedMaterial({ color: COLORS.camera, dashSize: 0.18, gapSize: 0.12, transparent: true, opacity: segments.opacity })
-		: new THREE.LineBasicMaterial({ vertexColors: Boolean(segments.colours), color: segments.colours ? 0xffffff : COLORS.camera, transparent: true, opacity: segments.opacity, depthWrite: false });
-	const lines = new THREE.LineSegments(geometry, lineMaterial);
-	if (segments.dashed) lines.computeLineDistances();
-	return lines;
+	return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: Boolean(segments.colours), color: COLORS.line, transparent: true, opacity: segments.opacity, depthWrite: false }));
 }
 
-function traceProjector(frames) {
-	const frame = deviceFrame(state.setup.projector);
+function fatLineSegments(segments) {
+	// Lines a few pixels wide that stay readable over the projected image; segments object: { positions, colour, width }
+	const lineMaterial = new LineMaterial({ color: segments.colour, linewidth: segments.width, transparent: true, depthWrite: false });
+	lineMaterial.resolution.copy(fatLineResolution);
+	return new LineSegments2(new LineSegmentsGeometry().setPositions(segments.positions), lineMaterial);
+}
+
+function traceGrid(trace) {
+	// Rays through a grid over the whole image; trace object: { frame, frames }
 	const grid = [];
 	for (let j = 0; j <= RAY_ROWS; j += 1) {
 		const row = [];
 		for (let i = 0; i <= RAY_COLUMNS; i += 1) {
 			const u = -1 + (2 * i) / RAY_COLUMNS;
 			const v = -1 + (2 * j) / RAY_ROWS;
-			row.push(traceRay({ origin: frame.origin, dir: deviceRay({ frame, u, v }), frames }));
+			row.push(traceRay({ origin: trace.frame.origin, dir: deviceRay({ frame: trace.frame, u, v }), frames: trace.frames }));
 		}
 		grid.push(row);
 	}
-	return { frame, grid, centre: traceRay({ origin: frame.origin, dir: frame.forward, frames }), edge: boundaryPixels().map(([u, v]) => traceRay({ origin: frame.origin, dir: deviceRay({ frame, u, v }), frames })) };
+	return grid;
 }
 
-function floorImage(grid) {
-	// Textures the projected effect onto the floor where the rays land, cell by cell
+function traceEdge(trace) {
+	// Rays along the edge of the image; trace object: { frame, frames }
+	return boundaryPixels().map(([u, v]) => traceRay({ origin: trace.frame.origin, dir: deviceRay({ frame: trace.frame, u, v }), frames: trace.frames }));
+}
+
+function traceProjector(frames) {
+	const frame = deviceFrame(state.setup.projector);
+	return { frame, grid: traceGrid({ frame, frames }), edge: traceEdge({ frame, frames }), centre: traceRay({ origin: frame.origin, dir: frame.forward, frames }) };
+}
+
+/**
+ * Patches on the floor and walls where the rays of neighbouring pixels land, cell by cell.
+ * Cells object: { grid, tintFor, lift }; tintFor(mirrorId) colours a cell lit directly (null) or via that mirror
+ */
+function landingCells(cells) {
+	const { grid, tintFor, lift } = cells;
 	const positions = [];
 	const uvs = [];
 	const colours = [];
 	const triangles = [];
-	const lift = 0.015;
 	for (let j = 0; j < RAY_ROWS; j += 1) {
 		for (let i = 0; i < RAY_COLUMNS; i += 1) {
 			const cell = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([ci, cj]) => ({ ci, cj, hit: grid[cj][ci] }));
 			const first = cell[0].hit;
-			if (cell.some((corner) => !corner.hit.floor || corner.hit.mirrorId !== first.mirrorId)) continue;
-			const tint = first.mirrorId ? 1 : 0.45;
+			// A cell only counts when all four corners land on the same surface by the same path
+			if (cell.some((corner) => !corner.hit.land || corner.hit.land.surface !== first.land.surface || corner.hit.mirrorId !== first.mirrorId)) continue;
+			const tint = tintFor(first.mirrorId);
 			[[0, 1, 2], [0, 2, 3]].forEach((order) => {
 				const corners = order.map((index) => cell[index]);
 				corners.forEach((corner) => {
-					positions.push(corner.hit.floor.x, lift, corner.hit.floor.z);
+					const point = lifted(corner.hit.land, lift);
+					positions.push(point.x, point.y, point.z);
 					uvs.push(corner.ci / RAY_COLUMNS, corner.cj / RAY_ROWS);
-					colours.push(tint, tint, tint);
+					colours.push(tint.r, tint.g, tint.b);
 				});
-				if (first.mirrorId) {
+				if (first.mirrorId && first.floor) {
 					const points = corners.map((corner) => [corner.hit.floor.x, corner.hit.floor.z]);
 					const xs = points.map((p) => p[0]);
 					const zs = points.map((p) => p[1]);
@@ -958,8 +1071,50 @@ function floorImage(grid) {
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 	geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
-	const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: effectTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-	return { mesh, triangles };
+	return { geometry, triangles };
+}
+
+function solidMaterial(opacity) {
+	return new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+}
+
+function projectedImage(projection) {
+	// The picture on the floor: the effect video, the test image when there is no camera, or flat colour in solid mode
+	const { solid } = state.toggles;
+	const inColour = new THREE.Color(COLORS.beamIn);
+	const outColour = new THREE.Color(COLORS.beamOut);
+	const cells = landingCells({
+		grid: projection.grid,
+		tintFor: (mirrorId) => (solid ? (mirrorId ? outColour : inColour) : new THREE.Color().setScalar(mirrorId ? 1 : 0.45)),
+		lift: 0.015,
+	});
+	const imageMaterial = solid
+		? solidMaterial(0.6)
+		: new THREE.MeshBasicMaterial({ map: state.setup.camera.enabled ? effectTexture : testPattern, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+	return { mesh: new THREE.Mesh(cells.geometry, imageMaterial), triangles: cells.triangles };
+}
+
+function beamVolume(volume) {
+	// Translucent walls between neighbouring edge rays, so a beam reads as one shape; volume object: { edge, inColour, outColour, opacity }
+	const positions = [];
+	const colours = [];
+	volume.edge.forEach((hit, index) => {
+		const next = volume.edge[(index + 1) % volume.edge.length];
+		// Only join rays that take the same path, otherwise a wall would cut across the gap between them
+		const surface = (item) => (item.land ? item.land.surface : null);
+		if (hit.points.length !== next.points.length || hit.mirrorId !== next.mirrorId || surface(hit) !== surface(next)) return;
+		for (let k = 0; k < hit.points.length - 1; k += 1) {
+			const colour = new THREE.Color(k === 0 ? volume.inColour : volume.outColour);
+			[hit.points[k], hit.points[k + 1], next.points[k + 1], hit.points[k], next.points[k + 1], next.points[k]].forEach((point) => {
+				positions.push(point.x, point.y, point.z);
+				colours.push(colour.r, colour.g, colour.b);
+			});
+		}
+	});
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+	geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+	return new THREE.Mesh(geometry, solidMaterial(volume.opacity));
 }
 
 function beamLines(projection) {
@@ -995,17 +1150,18 @@ function mirrorImageOutline(edge) {
 }
 
 function traceCamera(frames) {
+	// The full grid is only needed to fill the camera's footprint in solid mode
 	const frame = deviceFrame(state.setup.camera);
-	const edge = boundaryPixels().map(([u, v]) => traceRay({ origin: frame.origin, dir: deviceRay({ frame, u, v }), frames }));
 	const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => traceRay({ origin: frame.origin, dir: deviceRay({ frame, u, v }), frames }));
-	return { frame, edge, corners, centre: traceRay({ origin: frame.origin, dir: frame.forward, frames }) };
+	return { frame, edge: traceEdge({ frame, frames }), corners, centre: traceRay({ origin: frame.origin, dir: frame.forward, frames }), grid: state.toggles.solid ? traceGrid({ frame, frames }) : null };
 }
 
-function cameraLines(view) {
+function cameraOverlay(view) {
+	// Orange: a thick outline of what the camera sees on the floor and walls, and its frustum; solid mode fills both in
 	const footprint = [];
 	view.edge.forEach((hit, index) => {
 		const next = view.edge[(index + 1) % view.edge.length];
-		if (hit.floor && next.floor) footprint.push(hit.floor.x, 0.03, hit.floor.z, next.floor.x, 0.03, next.floor.z);
+		if (hit.land && next.land) footprint.push(...lifted(hit.land, 0.04).toArray(), ...lifted(next.land, 0.04).toArray());
 	});
 	const frustum = [];
 	view.corners.forEach((hit) => {
@@ -1014,8 +1170,15 @@ function cameraLines(view) {
 		}
 	});
 	const group = new THREE.Group();
-	group.add(lineSegmentsFrom({ positions: footprint, opacity: 0.85, dashed: true }));
-	group.add(lineSegmentsFrom({ positions: frustum, opacity: 0.22 }));
+	if (footprint.length) group.add(fatLineSegments({ positions: footprint, colour: COLORS.cameraView, width: 3 }));
+	const frustumLines = lineSegmentsFrom({ positions: frustum, opacity: 0.5 });
+	frustumLines.material.color.set(COLORS.cameraView);
+	group.add(frustumLines);
+	if (view.grid) {
+		const colour = new THREE.Color(COLORS.cameraView);
+		group.add(new THREE.Mesh(landingCells({ grid: view.grid, tintFor: () => colour, lift: 0.025 }).geometry, solidMaterial(0.35)));
+		group.add(beamVolume({ edge: view.edge, inColour: COLORS.cameraView, outColour: COLORS.cameraView, opacity: 0.1 }));
+	}
 	return group;
 }
 
@@ -1023,14 +1186,16 @@ function updateOptics() {
 	clearGroup(parts.optics);
 	const frames = state.setup.mirrors.map(mirrorFrame);
 	const projection = traceProjector(frames);
-	const image = floorImage(projection.grid);
-	const view = traceCamera(frames);
+	const image = projectedImage(projection);
 
 	const beam = new THREE.Group();
 	beam.add(image.mesh, beamLines(projection), mirrorImageOutline(projection.edge));
+	if (state.toggles.solid) beam.add(beamVolume({ edge: projection.edge, inColour: COLORS.beamIn, outColour: COLORS.beamOut, opacity: 0.14 }));
 	beam.visible = state.toggles.beam;
 	parts.optics.add(beam);
-	const cameraView = cameraLines(view);
+	// Without a camera there is nothing to trace for it
+	const view = state.setup.camera.enabled ? traceCamera(frames) : null;
+	const cameraView = view ? cameraOverlay(view) : new THREE.Group();
 	cameraView.visible = state.toggles.cameraView;
 	parts.optics.add(cameraView);
 
@@ -1051,9 +1216,10 @@ function opticsMetrics(input) {
 
 	const samples = crowdSamples();
 	const lit = samples.filter((point) => image.triangles.some(({ points, box }) => point[0] >= box[0] && point[0] <= box[1] && point[1] >= box[2] && point[1] <= box[3] && insideTriangle({ point, triangle: points })));
-	const cameraPolygon = view.edge.filter((hit) => hit.floor).map((hit) => [hit.floor.x, hit.floor.z]);
+	const cameraEdge = view ? view.edge : [];
+	const cameraPolygon = cameraEdge.filter((hit) => hit.floor).map((hit) => [hit.floor.x, hit.floor.z]);
 	const seen = cameraPolygon.length > 2 ? samples.filter((point) => insidePolygon({ point, polygon: cameraPolygon })) : [];
-	const seenViaMirror = view.edge.filter((hit) => hit.mirrorId).length / view.edge.length;
+	const seenViaMirror = cameraEdge.length ? cameraEdge.filter((hit) => hit.mirrorId).length / cameraEdge.length : 0;
 	const cameraCentre = cameraPolygon.length ? cameraPolygon.reduce((sum, [x, z]) => [sum[0] + x / cameraPolygon.length, sum[1] + z / cameraPolygon.length], [0, 0]) : null;
 
 	// Size of the projected image on the mirror it hits first
@@ -1086,7 +1252,7 @@ function opticsMetrics(input) {
 		toMirror,
 		toFloor,
 		aimPoint: centre.mirrorPoint || projection.frame.origin.clone().addScaledVector(projection.frame.forward, 5),
-		cameraAim: view.centre.mirrorPoint || view.frame.origin.clone().addScaledVector(view.frame.forward, 5),
+		cameraAim: view ? view.centre.mirrorPoint || view.frame.origin.clone().addScaledVector(view.frame.forward, 5) : null,
 	};
 }
 
@@ -1120,6 +1286,7 @@ function updateCables() {
 
 function heightReference() {
 	const { type, data } = selectionData();
+	if (type === 'camera' && !data.enabled) return null;
 	if (type === 'projector' || type === 'camera') {
 		return { point: new THREE.Vector3(data.x, data.y, data.z), label: `h ${metres(data.y)}` };
 	}
@@ -1179,12 +1346,12 @@ function updateMeasurements() {
 		['Crowd area lit via mirror', percent(metrics.crowdLit)],
 		['Light on floor (approx.)', metrics.lux ? `${fmt(metrics.lux, 0)} lux` : '–'],
 	] });
-	groups.push({ title: 'Camera', rows: [
+	groups.push({ title: 'Camera', rows: camera.enabled ? [
 		['Height', metres(camera.y)],
 		['View via mirror', percent(metrics.seenViaMirror)],
 		['Crowd area in view', percent(metrics.crowdSeen)],
 		['Offset to projected image', metrics.alignment !== null ? metres(metrics.alignment) : '–'],
-	] });
+	] : [['In use', 'no, the projector shows a test image']] });
 	setup.mirrors.forEach((mirror) => {
 		const corners = mirrorCorners(mirrorFrame(mirror));
 		const heights = corners.map((corner) => corner.y);
@@ -1239,7 +1406,7 @@ function collectWarnings() {
 		warnings.push('No mirrors placed yet. Add a hanging or a floor mirror under Objects.');
 	} else {
 		if (metrics.onMirror < 0.5) warnings.push(`Only ${percent(metrics.onMirror)} of the beam reaches a mirror.`);
-		if (metrics.seenViaMirror < 0.5) warnings.push('The camera sees less than half of its view via the mirror.');
+		if (setup.camera.enabled && metrics.seenViaMirror < 0.5) warnings.push('The camera sees less than half of its view via the mirror.');
 	}
 	if (hangingMirrors().length && !(setup.mounts || []).length) warnings.push('No mounting points selected: select the truss and click the dots on it.');
 	state.cables.filter((cable) => (cable.angle > 20 && cable.length > SHORT_SLING) || !cable.upward).forEach((cable) => warnings.push(`${cable.mirror} corner ${cable.corner}: the cable runs ${cable.upward ? `${fmt(cable.angle, 0)}° off vertical` : 'downwards'}.`));
@@ -1282,11 +1449,13 @@ function exportData() {
 		Projpos: [projector.x, projector.y, projector.z],
 		Projaim: r3(metrics.aimPoint),
 		Projfov: projector.hFov,
-		Videocam: sameRig ? 'mirror' : 'direct',
-		Videocampos: [camera.x, camera.y, camera.z],
-		Videocamaim: r3(metrics.cameraAim),
 		Trusssize: setup.truss.size,
 	};
+	if (camera.enabled) {
+		Object.assign(previz, { Videocam: sameRig ? 'mirror' : 'direct', Videocampos: [camera.x, camera.y, camera.z], Videocamaim: r3(metrics.cameraAim) });
+	} else {
+		notes.push('The camera is switched off, so the Previz camera parameters are left out; the projector shows its own content.');
+	}
 	if (mirror) {
 		Object.assign(previz, { Trussclear: round(trussClear, 3), Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: mirror.tilt, Mirrorpanel: mirror.panel });
 	}
@@ -1495,6 +1664,7 @@ function setMirrorMount(mirror, mount) {
 function selectedObject3D() {
 	const mirror = selectedMirror();
 	if (mirror) return mirrorObjects.get(mirror.id);
+	if (state.selection === 'camera' && !state.setup.camera.enabled) return null;
 	return { projector: parts.projector, camera: parts.camera, truss: parts.truss, dj: parts.dj }[state.selection] || null;
 }
 
@@ -1531,12 +1701,18 @@ function configureGizmo() {
 function select(key) {
 	state.selection = key;
 	const { type, data } = selectionData();
-	hintEl.textContent = type === 'mirror' && isFloorMirror(data) ? HINTS.floorMirror : HINTS[type];
+	hintEl.textContent = hintFor(type, data);
 	renderObjectList();
 	renderProps();
 	configureGizmo();
 	updateSelectionBox();
 	updateDimension();
+}
+
+function hintFor(type, data) {
+	if (type === 'mirror' && isFloorMirror(data)) return HINTS.floorMirror;
+	if (type === 'camera' && !data.enabled) return HINTS.cameraOff;
+	return HINTS[type];
 }
 
 function updateSelectionBox() {
@@ -1607,7 +1783,8 @@ renderer.domElement.addEventListener('pointerup', (event) => {
 	const bounds = renderer.domElement.getBoundingClientRect();
 	const ndc = new THREE.Vector2(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1);
 	raycaster.setFromCamera(ndc, camera);
-	const targets = [parts.projector, parts.camera, parts.dj, parts.truss, parts.mirrors, parts.stands];
+	// The raycaster also hits hidden objects, so a switched-off camera is left out by hand
+	const targets = [parts.projector, parts.camera, parts.dj, parts.truss, parts.mirrors, parts.stands].filter((group) => group.visible);
 	const hits = raycaster.intersectObjects(targets, true);
 	// With the truss selected, a mounting point wins over the truss tubes right above it
 	const mountHit = state.selection === 'truss' ? hits.find((item) => item.object.userData.isMounts) : null;
@@ -1632,11 +1809,91 @@ function toggleMount(id) {
 
 // Toolbar, buttons and keys
 
-function setView(name) {
-	const preset = VIEW_PRESETS[name];
-	state.viewTarget = { position: new THREE.Vector3(...preset.position), target: new THREE.Vector3(...preset.target) };
-	document.querySelectorAll('[data-view]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.view === name)));
+function orthoZoomFor(distance) {
+	// Zoom at which the orthographic camera shows as much as the perspective camera from this distance
+	return ORTHO_HEIGHT / (2 * distance * Math.tan((perspectiveCamera.fov / 2) * DEG));
 }
+
+function viewFor(preset) {
+	// Position, target and zoom of the active view camera for a preset; preset object: { direction, target, distance }
+	const target = new THREE.Vector3(...preset.target);
+	const direction = new THREE.Vector3(...preset.direction).normalize();
+	if (camera.isOrthographicCamera) {
+		return { target, position: target.clone().addScaledVector(direction, ORTHO_DISTANCE), zoom: orthoZoomFor(preset.distance) };
+	}
+	return { target, position: target.clone().addScaledVector(direction, preset.distance), zoom: 1 };
+}
+
+function currentView() {
+	// The current viewpoint as a preset, so it carries over when the projection changes
+	const offset = camera.position.clone().sub(orbit.target);
+	const distance = camera.isOrthographicCamera ? orthoZoomFor(1) / camera.zoom : offset.length();
+	return { direction: offset.normalize().toArray(), target: orbit.target.toArray(), distance };
+}
+
+function placeCamera(view) {
+	camera.position.copy(view.position);
+	orbit.target.copy(view.target);
+	camera.zoom = view.zoom;
+	camera.updateProjectionMatrix();
+	camera.lookAt(orbit.target);
+}
+
+function markView() {
+	document.querySelectorAll('[data-view]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.view === state.view)));
+}
+
+function setView(name) {
+	// In isometric mode the 3D button goes to the true isometric angle
+	state.view = name;
+	const preset = VIEW_PRESETS[name === 'overview' && state.projection === 'iso' ? 'iso' : name];
+	state.flight = { start: performance.now(), from: { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom }, to: viewFor(preset) };
+	markView();
+}
+
+function updateFlight(now) {
+	// Eases the camera to a preset in a fixed time, swinging around the target instead of cutting through the room
+	const { flight } = state;
+	if (!flight) return;
+	const t = Math.min(1, (now - flight.start) / FLIGHT_MS);
+	const ease = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+	const fromOffset = flight.from.position.clone().sub(flight.from.target);
+	const toOffset = flight.to.position.clone().sub(flight.to.target);
+	const swing = new THREE.Quaternion().setFromUnitVectors(fromOffset.clone().normalize(), toOffset.clone().normalize());
+	const offset = fromOffset.clone().normalize()
+		.applyQuaternion(new THREE.Quaternion().slerp(swing, ease))
+		.multiplyScalar(THREE.MathUtils.lerp(fromOffset.length(), toOffset.length(), ease));
+	orbit.target.lerpVectors(flight.from.target, flight.to.target, ease);
+	camera.position.copy(orbit.target).add(offset);
+	camera.zoom = THREE.MathUtils.lerp(flight.from.zoom, flight.to.zoom, ease);
+	camera.updateProjectionMatrix();
+	if (t === 1) state.flight = null;
+}
+
+function setProjection(projection) {
+	if (projection === state.projection) return;
+	const view = currentView();
+	state.projection = projection;
+	state.flight = null;
+	camera = projection === 'iso' ? isoCamera : perspectiveCamera;
+	orbit.object = camera;
+	transform.camera = camera;
+	// Fog is tuned for the perspective camera; the orthographic one sits further back and would fade everything
+	scene.fog = projection === 'iso' ? null : fog;
+	resize();
+	placeCamera(viewFor(view));
+	mirrorObjects.forEach(showMirrorFace);
+	document.querySelector('[data-projection]').setAttribute('aria-pressed', String(projection === 'iso'));
+	// The overview (or a free view when switching on) turns into the isometric angle; Top, Side and Front stay put
+	if (state.view === 'overview' || (projection === 'iso' && !state.view)) setView('overview');
+}
+
+orbit.addEventListener('start', () => {
+	// Grabbing the view stops a flight, and the view no longer matches a preset
+	state.flight = null;
+	state.view = null;
+	markView();
+});
 
 function setMode(mode) {
 	state.mode = mode;
@@ -1645,16 +1902,28 @@ function setMode(mode) {
 
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 document.querySelectorAll('[data-mode]').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
+document.querySelector('[data-projection]').addEventListener('click', () => setProjection(state.projection === 'iso' ? 'perspective' : 'iso'));
 document.querySelectorAll('[data-toggle]').forEach((button) => button.addEventListener('click', () => {
 	const key = button.dataset.toggle;
 	state.toggles[key] = !state.toggles[key];
 	button.setAttribute('aria-pressed', String(state.toggles[key]));
+	// Solid changes how the optics are drawn; the setup itself stays the same, so nothing is saved
+	if (key === 'solid') refresh({ light: true, skipSave: true });
 	applyToggles();
 	configureGizmo();
 }));
 
+document.getElementById('btnUseCamera').addEventListener('click', () => {
+	state.setup.camera.enabled = !state.setup.camera.enabled;
+	refresh({});
+	select(state.selection);
+});
+
 function applyToggles() {
 	parts.crowd.visible = state.toggles.crowd;
+	parts.camera.visible = state.setup.camera.enabled;
+	document.getElementById('btnUseCamera').setAttribute('aria-pressed', String(state.setup.camera.enabled));
+	document.querySelector('[data-toggle="cameraView"]').disabled = !state.setup.camera.enabled;
 	const [beam, cameraView] = parts.optics.children;
 	if (beam) beam.visible = state.toggles.beam;
 	if (cameraView) cameraView.visible = state.toggles.cameraView;
@@ -1788,21 +2057,25 @@ function resize() {
 	if (!width || !height) return;
 	renderer.setSize(width, height);
 	labelRenderer.setSize(width, height);
-	camera.aspect = width / height;
-	camera.updateProjectionMatrix();
+	const aspect = width / height;
+	perspectiveCamera.aspect = aspect;
+	perspectiveCamera.updateProjectionMatrix();
+	Object.assign(isoCamera, { left: (-ORTHO_HEIGHT * aspect) / 2, right: (ORTHO_HEIGHT * aspect) / 2, top: ORTHO_HEIGHT / 2, bottom: -ORTHO_HEIGHT / 2 });
+	isoCamera.updateProjectionMatrix();
+	// Fat lines measure their width in screen pixels
+	fatLineResolution.set(width, height);
+	parts.optics.traverse((node) => {
+		if (node.material && node.material.isLineMaterial) node.material.resolution.copy(fatLineResolution);
+	});
 	const size = new THREE.Vector2();
 	renderer.getDrawingBufferSize(size);
-	mirrorObjects.forEach((group) => group.children[0].getRenderTarget().setSize(Math.round(size.x * 0.6), Math.round(size.y * 0.6)));
+	mirrorObjects.forEach((group) => group.userData.reflector.getRenderTarget().setSize(Math.round(size.x * 0.6), Math.round(size.y * 0.6)));
 }
 
 new ResizeObserver(resize).observe(viewportEl);
 
-function animate() {
-	if (state.viewTarget) {
-		camera.position.lerp(state.viewTarget.position, 0.12);
-		orbit.target.lerp(state.viewTarget.target, 0.12);
-		if (camera.position.distanceTo(state.viewTarget.position) < 0.02) state.viewTarget = null;
-	}
+function animate(now) {
+	updateFlight(now);
 	orbit.update();
 	if (selectionBox) selectionBox.update();
 	renderer.render(scene, camera);
@@ -1817,4 +2090,11 @@ resize();
 renderer.setAnimationLoop(animate);
 
 // Handle for checking the configurator from the browser console
-window.bbConfigurator = { state, camera, parts, transform, exportData, tdScript };
+window.bbConfigurator = {
+	state, parts, transform, orbit, exportData, tdScript, setView, setProjection,
+	// Draws one frame by hand, for checks in a background tab where the animation loop pauses
+	frame: animate,
+	get camera() {
+		return camera;
+	},
+};

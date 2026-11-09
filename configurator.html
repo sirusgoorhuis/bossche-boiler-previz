@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css?v=6">
-<link rel="stylesheet" href="configurator.css?v=4">
+<link rel="stylesheet" href="configurator.css?v=5">
 <script type="importmap">
 {
 	"imports": {
@@ -44,10 +44,13 @@
 		<div class="bezel-core viewport" id="viewport">
 			<div class="toolbar" role="toolbar" aria-label="View tools">
 				<div class="tool-group" id="viewButtons">
-					<button class="tbtn" data-view="perspective" aria-pressed="true">3D</button>
+					<button class="tbtn" data-view="overview" aria-pressed="true">3D</button>
 					<button class="tbtn" data-view="top">Top</button>
 					<button class="tbtn" data-view="side">Side</button>
 					<button class="tbtn" data-view="front">Front</button>
+				</div>
+				<div class="tool-group">
+					<button class="tbtn" data-projection="iso" aria-pressed="false" title="Isometrisch: zonder perspectief, zodat maten overal even groot blijven">Iso</button>
 				</div>
 				<div class="tool-group" id="modeButtons">
 					<button class="tbtn" data-mode="translate" aria-pressed="true" title="W">Move</button>
@@ -57,16 +60,20 @@
 				<div class="tool-group" id="toggleButtons">
 					<button class="tbtn" data-toggle="snap" aria-pressed="true" title="Stappen van 5 cm en 5°">Snap</button>
 					<button class="tbtn" data-toggle="beam" aria-pressed="true">Beam</button>
-					<button class="tbtn" data-toggle="cameraView" aria-pressed="true">Camera view</button>
+					<button class="tbtn" data-toggle="solid" aria-pressed="false" title="Licht en camerabeeld als effen kleur">Solid</button>
 					<button class="tbtn" data-toggle="crowd" aria-pressed="true">Crowd</button>
 					<button class="tbtn" data-toggle="labels" aria-pressed="true">Labels</button>
+				</div>
+				<div class="tool-group" id="cameraButtons">
+					<button class="tbtn" id="btnUseCamera" aria-pressed="true" title="Uit: de projector toont een kleurrijk testbeeld">Use camera</button>
+					<button class="tbtn" data-toggle="cameraView" aria-pressed="true">Camera view</button>
 				</div>
 			</div>
 			<p class="viewport-hint" id="hint">Klik een object om het te kiezen. Sleep om rond te kijken, scroll om te zoomen.</p>
 			<div class="legend-3d" aria-hidden="true">
 				<span><i class="swatch beam-in"></i>Projector naar spiegel</span>
 				<span><i class="swatch beam-out"></i>Spiegel naar vloer</span>
-				<span><i class="swatch cam"></i>Camera ziet via spiegel</span>
+				<span><i class="swatch cam"></i>Wat de camera ziet</span>
 			</div>
 		</div>
 	</section>
@@ -116,6 +123,6 @@
 
 <script src="spec.js?v=2"></script>
 <script src="default-setup.js?v=1"></script>
-<script type="module" src="configurator.js?v=11"></script>
+<script type="module" src="configurator.js?v=15"></script>
 </body>
 </html>
