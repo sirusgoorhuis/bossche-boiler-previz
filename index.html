@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Een spiegel boven de dansvloer · concept · Bossche Boiler collectief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+
+<div class="ambient" aria-hidden="true">
+	<span class="orb orb-a"></span>
+	<span class="orb orb-b"></span>
+</div>
+
+<nav class="island" aria-label="Secties">
+	<a class="island-brand" href="#top">Bossche Boiler</a>
+	<a href="#previz">Previz</a>
+	<a href="#idee">Idee</a>
+	<a href="#werking">Werking</a>
+	<a href="#opstelling">Opstelling</a>
+	<a href="#specs">Specs</a>
+</nav>
+
+<header class="hero wrap" id="top">
+	<div class="hero-text">
+		<span class="tag reveal">Bossche Boiler collectief · concept</span>
+		<h1 class="reveal">Een spiegel boven de dansvloer</h1>
+		<p class="lede reveal">Een projector schijnt via een grote spiegel op de mensen die eronder dansen. Wie omhoog kijkt, ziet de hele vloer van bovenaf, met het beeld op de mensen en zichzelf ertussen.</p>
+		<a class="cta reveal" href="#previz">
+			<span>Bekijk de previz</span>
+			<span class="cta-icon" aria-hidden="true">↓</span>
+		</a>
+	</div>
+	<div class="hero-visual bezel reveal">
+		<div class="bezel-core">
+			<video src="media/undermirror_show.mp4" poster="media/undermirror_show.jpg" muted loop autoplay playsinline aria-label="Previz: de spiegel van onderen gezien, met het publiek erin"></video>
+			<span class="hero-caption">Under Mirror · Show</span>
+		</div>
+	</div>
+</header>
+
+<main>
+	<section class="viewer wrap reveal" id="previz" aria-label="Previz">
+		<div class="bezel">
+			<div class="bezel-core stage" id="stage">
+				<video id="mainVideo" class="main-video" muted loop playsinline preload="auto"></video>
+				<div class="pip" id="pip">
+					<video id="fxVideo" muted loop playsinline preload="auto"></video>
+					<span class="pip-label">Projected effect</span>
+				</div>
+				<div class="stage-label" id="stageLabel"></div>
+				<div class="loading" id="loading">Loading…</div>
+			</div>
+		</div>
+
+		<aside class="bezel" aria-label="Control panel">
+			<div class="bezel-core panel">
+				<div class="panel-group panel-camera">
+					<h2 class="panel-title">Previz camera</h2>
+					<div class="grid grid-4" id="cameraButtons"></div>
+					<div class="row">
+						<button class="btn" id="btnSpin" aria-pressed="false">Spin</button>
+						<label class="slider" for="spinSpeed">
+							<span>Speed</span>
+							<input type="range" id="spinSpeed" min="0.25" max="2" step="0.05" value="1" aria-label="Spin speed">
+						</label>
+						<button class="btn" id="btnPip" aria-pressed="true">Effect Window</button>
+					</div>
+				</div>
+
+				<div class="panel-group panel-settings">
+					<h2 class="panel-title">Effect</h2>
+					<div class="grid grid-4" id="effectButtons"></div>
+
+					<h2 class="panel-title">Look</h2>
+					<div class="grid grid-3" id="lookButtons"></div>
+
+					<p class="panel-note" id="lookNote"></p>
+				</div>
+			</div>
+		</aside>
+	</section>
+
+	<section class="wrap split" id="idee">
+		<div class="split-head reveal">
+			<span class="tag">01 · Het idee</span>
+			<h2>Mensen als projectiescherm</h2>
+		</div>
+		<div class="split-body reveal">
+			<p>Richt een projector op het publiek en hang een spiegel boven de mensen, zodat ze zelf deel worden van het lichtwerk. Het beeld valt op hoofden, schouders, armen en de vloer, en verandert mee met hoe er gedanst wordt.</p>
+			<p>In de spiegel zie je dat van bovenaf.</p>
+		</div>
+	</section>
+
+	<section class="wrap" id="werking">
+		<div class="section-head reveal">
+			<span class="tag">02 · Hoe het werkt</span>
+			<h2>Eén lijn, heen en terug</h2>
+		</div>
+		<ol class="bento steps">
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">01</span>
+					<h3>Filmen via de spiegel</h3>
+					<p>Een camera naast de projector kijkt in de spiegel en ziet zo de dansvloer van bovenaf. Een infraroodcamera werkt het best: die ziet de mensen wel, maar de projectie niet.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">02</span>
+					<h3>Het effect reageert op beweging</h3>
+					<p>TouchDesigner vergelijkt elk camerabeeld met het vorige. Waar iemand beweegt, ontstaat beeld. In het effect Lava Blobs zijn dat glanzende vloeibare vormen met de silhouetten van de dansers erin.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">03</span>
+					<h3>Terug via dezelfde spiegel</h3>
+					<p>De projector staat op een standaard van 2 meter achter in de zaal en schijnt omhoog in de spiegel. Die kaatst het beeld van bovenaf op het publiek. Camera en projector kijken langs dezelfde lijn, dus het beeld komt terecht op de mensen die het maken.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">04</span>
+					<h3>Jezelf terugzien</h3>
+					<p>Wie omhoog kijkt, ziet de hele vloer met het beeld erop. En zichzelf ertussen.</p>
+				</div>
+			</li>
+		</ol>
+	</section>
+
+	<section class="wrap" id="opstelling">
+		<div class="section-head reveal">
+			<span class="tag">03 · Opstelling</span>
+			<h2>Maten uit de previz</h2>
+			<p class="section-intro">Een startpunt om mee te testen. Alles kan nog schuiven.</p>
+		</div>
+		<div class="drawings">
+			<figure class="bezel reveal">
+				<div class="bezel-core">
+					<svg id="sideView" role="img" aria-label="Zijaanzicht met de lichtweg van projector via spiegel naar publiek"></svg>
+					<figcaption>Zijaanzicht met de lichtweg: projector, spiegel, publiek</figcaption>
+					<ol class="legend" id="sideLegend"></ol>
+				</div>
+			</figure>
+			<figure class="bezel figure-split reveal">
+				<div class="bezel-core">
+					<svg id="topView" role="img" aria-label="Bovenaanzicht van de opstelling"></svg>
+					<div class="figure-meta">
+						<figcaption>Bovenaanzicht</figcaption>
+						<ol class="legend" id="topLegend"></ol>
+					</div>
+				</div>
+			</figure>
+		</div>
+	</section>
+
+	<section class="wrap" id="specs">
+		<div class="section-head reveal">
+			<span class="tag">04 · Specificaties</span>
+			<h2>Wat er nodig is</h2>
+		</div>
+		<div class="bento specs" id="specList"></div>
+	</section>
+
+	<section class="wrap split" id="effecten">
+		<div class="split-head reveal">
+			<span class="tag">05 · Effecten</span>
+			<h2>Los te wisselen</h2>
+		</div>
+		<div class="split-body reveal">
+			<p>Effecten staan los van de opstelling. Elk effect krijgt hetzelfde camerabeeld en stuurt één beeld naar de projector, dus een nieuw effect plug je erin zonder aan de opstelling te komen.</p>
+			<ul class="effect-list">
+				<li><strong>Lava Blobs</strong><span>klaar</span><p>Beweging maakt een soort was die opstijgt, samensmelt en weer oplost, met de contouren van de dansers erin.</p></li>
+				<li><strong>Slot 2 t/m 4</strong><span>nog leeg</span><p>Ruimte voor ideeën uit het collectief.</p></li>
+			</ul>
+		</div>
+	</section>
+
+	<section class="wrap note reveal" aria-label="Let op">
+		<p><strong>Let op:</strong> dit is een previz. De dansers zijn simpele poppetjes, het licht is benaderd en het effect reageert op die poppetjes in plaats van op echte mensen. Je ziet hoe de opstelling werkt. Hoe het er straks precies uitziet, merk je pas op locatie.</p>
+	</section>
+</main>
+
+<footer class="site-footer">
+	<div class="wrap">Bossche Boiler collectief · previz gemaakt in TouchDesigner</div>
+</footer>
+
+<script src="spec.js?v=2"></script>
+<script src="app.js?v=5"></script>
+</body>
+</html>
