@@ -1,0 +1,489 @@
+/* Setup configurator: full-screen 3D view with a side panel, same visual language as the concept page */
+.config-page {
+	height: 100dvh;
+	overflow: hidden;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
+.config-bar {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 20px;
+	padding: 14px 20px;
+	border-bottom: 1px solid var(--hairline);
+}
+
+.config-back {
+	padding: 8px 14px;
+	border: 1px solid var(--hairline-strong);
+	border-radius: 999px;
+	color: var(--soft);
+	font-size: 0.82rem;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: color 0.45s var(--spring), border-color 0.45s var(--spring);
+}
+
+.config-back:hover {
+	color: var(--ink);
+	border-color: rgba(255, 255, 255, 0.3);
+}
+
+.config-heading {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+}
+
+.config-sub {
+	color: var(--faint);
+	font-size: 0.82rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.config-actions {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.config-actions .btn {
+	padding: 0 16px;
+}
+
+.btn-primary {
+	border-color: rgba(255, 255, 255, 0.85);
+	background: linear-gradient(180deg, #ffffff, #d6d6dc);
+	box-shadow: inset 0 1px 0 #ffffff, 0 6px 24px -8px rgba(205, 184, 255, 0.7);
+	color: #0b0b0e;
+	font-weight: 500;
+}
+
+.btn-primary:hover {
+	color: #0b0b0e;
+}
+
+.config-layout {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 400px;
+	gap: 12px;
+	min-height: 0;
+	padding: 12px;
+}
+
+/* 3D view */
+.viewport-shell {
+	min-height: 0;
+	display: flex;
+}
+
+.viewport {
+	position: relative;
+	container-type: inline-size;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	background: #07070a;
+}
+
+.viewport canvas {
+	display: block;
+}
+
+.viewport .labels-layer {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.toolbar {
+	position: absolute;
+	top: 14px;
+	left: 14px;
+	right: 14px;
+	z-index: 2;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	pointer-events: none;
+}
+
+.tool-group {
+	display: flex;
+	gap: 2px;
+	padding: 4px;
+	border: 1px solid var(--hairline-strong);
+	border-radius: 999px;
+	background: rgba(12, 12, 15, 0.7);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	box-shadow: var(--gleam);
+	pointer-events: auto;
+}
+
+.tbtn {
+	height: 28px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--soft);
+	font: 400 12px/1 var(--sans);
+	cursor: pointer;
+	transition: color 0.45s var(--spring), background-color 0.45s var(--spring), transform 0.45s var(--spring);
+}
+
+.tbtn:hover {
+	color: var(--ink);
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.tbtn:active {
+	transform: scale(0.96);
+}
+
+.tbtn[aria-pressed="true"] {
+	background: linear-gradient(180deg, #ffffff, #d6d6dc);
+	color: #0b0b0e;
+	font-weight: 500;
+}
+
+/* Toggles get a quieter on state than the view and mode choice */
+#toggleButtons .tbtn[aria-pressed="true"] {
+	background: rgba(255, 255, 255, 0.14);
+	color: var(--ink);
+	font-weight: 400;
+}
+
+.tbtn:disabled {
+	opacity: 0.3;
+	cursor: not-allowed;
+}
+
+.tbtn:focus-visible {
+	outline: 1px solid var(--lilac);
+	outline-offset: 2px;
+}
+
+.viewport-hint {
+	position: absolute;
+	left: 16px;
+	bottom: 14px;
+	z-index: 2;
+	max-width: min(520px, 46%);
+	padding: 8px 14px;
+	border: 1px solid var(--hairline);
+	border-radius: 999px;
+	background: rgba(12, 12, 15, 0.7);
+	color: var(--soft);
+	font-size: 0.8rem;
+	pointer-events: none;
+}
+
+.legend-3d {
+	position: absolute;
+	right: 16px;
+	bottom: 14px;
+	z-index: 2;
+	display: flex;
+	gap: 14px;
+	padding: 8px 14px;
+	border: 1px solid var(--hairline);
+	border-radius: 999px;
+	background: rgba(12, 12, 15, 0.7);
+	color: var(--faint);
+	font: 500 10px/1 var(--mono);
+	letter-spacing: 0.06em;
+	pointer-events: none;
+}
+
+.legend-3d span {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.swatch {
+	display: inline-block;
+	width: 14px;
+	height: 2px;
+	border-radius: 2px;
+}
+
+.swatch.beam-in { background: var(--lilac); }
+.swatch.beam-out { background: var(--cyan); }
+.swatch.cam { background: repeating-linear-gradient(90deg, #fff 0 3px, transparent 3px 6px); }
+
+/* Labels drawn in the 3D view */
+.tag3d {
+	padding: 3px 8px;
+	border: 1px solid var(--hairline-strong);
+	border-radius: 999px;
+	background: rgba(5, 5, 6, 0.72);
+	color: var(--ink);
+	font: 500 10px/1.2 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.tag3d.dim {
+	border-color: rgba(205, 184, 255, 0.6);
+	color: var(--lilac);
+	text-transform: none;
+	letter-spacing: 0.02em;
+}
+
+/* Side panel */
+.sidebar {
+	display: grid;
+	align-content: start;
+	gap: 12px;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 2px;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.side-block {
+	padding: 14px 14px 16px;
+}
+
+.side-block .panel-title:first-child {
+	margin-top: 2px;
+}
+
+.side-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+.side-note {
+	margin-bottom: 4px;
+	color: var(--soft);
+	font-size: 0.82rem;
+	line-height: 1.5;
+}
+
+.object-list {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 6px;
+}
+
+/* Property fields */
+.props {
+	display: grid;
+	gap: 6px;
+}
+
+.prop {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 112px 28px;
+	align-items: center;
+	gap: 8px;
+}
+
+.prop label {
+	color: var(--soft);
+	font-size: 0.82rem;
+}
+
+.prop input[type="number"] {
+	width: 100%;
+	height: 32px;
+	padding: 0 12px;
+	border: 1px solid var(--hairline);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.035);
+	box-shadow: var(--gleam);
+	color: var(--ink);
+	font: 400 13px/1 var(--mono);
+	text-align: right;
+	-moz-appearance: textfield;
+	transition: border-color 0.45s var(--spring);
+}
+
+.prop input[type="number"]::-webkit-inner-spin-button {
+	opacity: 0.4;
+}
+
+.prop input:focus {
+	outline: none;
+	border-color: var(--lilac);
+}
+
+.prop .unit {
+	color: var(--faint);
+	font: 500 10px/1 var(--mono);
+}
+
+.prop-check {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--soft);
+	font-size: 0.82rem;
+}
+
+.prop-check input {
+	accent-color: #f2f2f5;
+}
+
+.prop-section {
+	margin: 10px 0 2px;
+	color: var(--faint);
+	font: 500 9px/1 var(--mono);
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.prop-help {
+	margin: 6px 0 0;
+	color: var(--faint);
+	font-size: 0.78rem;
+	line-height: 1.5;
+}
+
+/* Measurements */
+.measure {
+	display: grid;
+	gap: 14px;
+}
+
+.measure-group h3 {
+	margin: 0 0 6px;
+	color: var(--ink);
+	font: 500 12px/1 var(--sans);
+	letter-spacing: 0;
+}
+
+.measure-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 5px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	font-size: 0.8rem;
+}
+
+.measure-row span:first-child {
+	color: var(--soft);
+}
+
+.measure-row span:last-child {
+	color: var(--ink);
+	font-family: var(--mono);
+	font-size: 0.78rem;
+	text-align: right;
+}
+
+.warnings {
+	display: grid;
+	gap: 6px;
+	margin: 0 0 12px;
+	padding: 0;
+	list-style: none;
+}
+
+.warnings:empty {
+	display: none;
+}
+
+.warnings li {
+	padding: 8px 12px;
+	border: 1px solid rgba(255, 196, 120, 0.35);
+	border-radius: 12px;
+	background: rgba(255, 196, 120, 0.06);
+	color: #ffd9a8;
+	font-size: 0.8rem;
+	line-height: 1.45;
+}
+
+.toast {
+	position: fixed;
+	left: 50%;
+	bottom: 28px;
+	z-index: 2;
+	padding: 10px 18px;
+	border: 1px solid var(--hairline-strong);
+	border-radius: 999px;
+	background: rgba(12, 12, 15, 0.85);
+	color: var(--ink);
+	font-size: 0.85rem;
+	opacity: 0;
+	transform: translate(-50%, 12px);
+	pointer-events: none;
+	transition: opacity 0.5s var(--spring), transform 0.5s var(--spring);
+}
+
+.toast.on {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}
+
+/* Hint and colour legend share the bottom edge; drop the legend when the view gets narrow */
+@container (max-width: 1080px) {
+	.legend-3d {
+		display: none;
+	}
+
+	.viewport-hint {
+		max-width: calc(100% - 32px);
+	}
+}
+
+@media (max-width: 1100px) {
+	.config-page {
+		height: auto;
+		overflow: auto;
+	}
+
+	.config-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.viewport-shell {
+		height: 62dvh;
+	}
+
+	.sidebar {
+		overflow: visible;
+	}
+
+	.config-sub {
+		display: none;
+	}
+}
+
+@media (max-width: 640px) {
+	.config-bar {
+		flex-wrap: wrap;
+	}
+
+	.config-actions {
+		width: 100%;
+		margin-left: 0;
+	}
+
+	.config-actions .btn {
+		flex: 1;
+		padding: 0 8px;
+	}
+
+	.legend-3d,
+	.viewport-hint {
+		display: none;
+	}
+}

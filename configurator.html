@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup configurator · Bossche Boiler collectief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="configurator.css?v=3">
+<script type="importmap">
+{
+	"imports": {
+		"three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+		"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+	}
+}
+</script>
+</head>
+<body class="config-page">
+
+<div class="ambient" aria-hidden="true">
+	<span class="orb orb-a"></span>
+	<span class="orb orb-b"></span>
+</div>
+
+<header class="config-bar">
+	<a class="config-back" href="index.html">← Concept</a>
+	<div class="config-heading">
+		<span class="tag">Setup configurator</span>
+		<span class="config-sub">Alle maten in meters en graden, gemeten vanaf het midden van de vloer</span>
+	</div>
+	<div class="config-actions">
+		<button class="btn" id="btnImport" title="Laad een eerder geëxporteerde setup">Import</button>
+		<input type="file" id="importFile" accept="application/json,.json" hidden>
+		<button class="btn" id="btnCopyTd" title="Python voor de TouchDesigner Textport">Copy TD script</button>
+		<button class="btn btn-primary" id="btnExport">Export JSON</button>
+	</div>
+</header>
+
+<main class="config-layout">
+	<section class="bezel viewport-shell" aria-label="3D view">
+		<div class="bezel-core viewport" id="viewport">
+			<div class="toolbar" role="toolbar" aria-label="View tools">
+				<div class="tool-group" id="viewButtons">
+					<button class="tbtn" data-view="perspective" aria-pressed="true">3D</button>
+					<button class="tbtn" data-view="top">Top</button>
+					<button class="tbtn" data-view="side">Side</button>
+					<button class="tbtn" data-view="front">Front</button>
+				</div>
+				<div class="tool-group" id="modeButtons">
+					<button class="tbtn" data-mode="translate" aria-pressed="true" title="W">Move</button>
+					<button class="tbtn" data-mode="rotate" title="E">Rotate</button>
+					<button class="tbtn" data-mode="scale" title="R (spiegels)">Scale</button>
+				</div>
+				<div class="tool-group" id="toggleButtons">
+					<button class="tbtn" data-toggle="snap" aria-pressed="true" title="Stappen van 5 cm en 5°">Snap</button>
+					<button class="tbtn" data-toggle="beam" aria-pressed="true">Beam</button>
+					<button class="tbtn" data-toggle="cameraView" aria-pressed="true">Camera view</button>
+					<button class="tbtn" data-toggle="crowd" aria-pressed="true">Crowd</button>
+					<button class="tbtn" data-toggle="labels" aria-pressed="true">Labels</button>
+				</div>
+			</div>
+			<p class="viewport-hint" id="hint">Klik een object om het te kiezen. Sleep om rond te kijken, scroll om te zoomen.</p>
+			<div class="legend-3d" aria-hidden="true">
+				<span><i class="swatch beam-in"></i>Projector naar spiegel</span>
+				<span><i class="swatch beam-out"></i>Spiegel naar vloer</span>
+				<span><i class="swatch cam"></i>Camera ziet via spiegel</span>
+			</div>
+		</div>
+	</section>
+
+	<aside class="sidebar" aria-label="Setup">
+		<div class="bezel">
+			<div class="bezel-core side-block">
+				<h2 class="panel-title">Objects</h2>
+				<div class="object-list" id="objectList"></div>
+				<div class="side-row">
+					<button class="btn" id="btnAddMirror">Add mirror</button>
+					<button class="btn" id="btnDelete">Delete mirror</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="bezel">
+			<div class="bezel-core side-block">
+				<h2 class="panel-title" id="propsTitle">Properties</h2>
+				<div class="props" id="props"></div>
+			</div>
+		</div>
+
+		<div class="bezel">
+			<div class="bezel-core side-block">
+				<h2 class="panel-title">Measurements</h2>
+				<ul class="warnings" id="warnings"></ul>
+				<div class="measure" id="measure"></div>
+			</div>
+		</div>
+
+		<div class="bezel">
+			<div class="bezel-core side-block">
+				<h2 class="panel-title">Setup</h2>
+				<p class="side-note">Je setup wordt automatisch bewaard in deze browser. Met Export JSON neem je hem mee naar TouchDesigner of naar iemand anders.</p>
+				<div class="side-row">
+					<button class="btn" id="btnReset">Reset to previz</button>
+				</div>
+			</div>
+		</div>
+	</aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="spec.js?v=2"></script>
+<script type="module" src="configurator.js?v=6"></script>
+</body>
+</html>

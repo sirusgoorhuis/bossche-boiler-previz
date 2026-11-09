@@ -536,6 +536,11 @@ section {
 	color: var(--ink);
 }
 
+.split-body .cta {
+	justify-self: start;
+	margin-top: 8px;
+}
+
 /* Bento grids */
 .bento {
 	display: grid;
@@ -879,7 +884,7 @@ figcaption {
 		padding-top: 120px;
 	}
 
-	.island a:not(.island-brand):not([href="#previz"]) {
+	.island a:not(.island-brand):not([href="#previz"]):not([href="configurator.html"]) {
 		display: none;
 	}
 
