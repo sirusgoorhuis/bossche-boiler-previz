@@ -245,6 +245,10 @@ function mergeSetup(setups) {
 		id: mirror.id || `m${index + 1}`,
 		mount: mirror.mount === 'floor' ? 'floor' : 'truss',
 	}));
+	const ids = new Set(merged.mirrors.map((mirror) => mirror.id));
+	merged.mirrors.forEach((mirror) => {
+		if (mirror.twin && !ids.has(mirror.twin)) delete mirror.twin;
+	});
 	merged.mounts = Array.isArray(incoming.mounts) ? [...incoming.mounts] : null;
 	return merged;
 }
@@ -279,6 +283,32 @@ function mirrorName(mirror) {
 
 function isFloorMirror(mirror) {
 	return mirror.mount === 'floor';
+}
+
+function twinOf(mirror) {
+	return mirror.twin ? state.setup.mirrors.find((item) => item.id === mirror.twin) || null : null;
+}
+
+function mirrorTwin(source) {
+	// Makes the paired mirror an exact reflection of this one across the centre line of the room (x = 0):
+	// x flips, rotation and roll turn the other way, everything else stays the same
+	const twin = twinOf(source);
+	if (!twin) return;
+	const becameHanging = isFloorMirror(twin) && !isFloorMirror(source);
+	Object.assign(twin, {
+		mount: source.mount,
+		x: round(-source.x, 3) || 0,
+		y: source.y,
+		z: source.z,
+		w: source.w,
+		d: source.d,
+		panel: source.panel,
+		tilt: source.tilt,
+		yaw: round(-source.yaw, 1) || 0,
+		roll: round(-source.roll, 1) || 0,
+		twin: source.id,
+	});
+	if (becameHanging) autoMounts({ mirrors: [twin], keep: true });
 }
 
 function hangingMirrors() {
@@ -1321,7 +1351,7 @@ function updateDimension() {
 
 function measureGroup(group) {
 	// Group object: { title, rows: [[label, value], ...] }
-	const rows = group.rows.map(([label, value]) => `<div class="measure-row"><span>${label}</span><span>${value}</span></div>`).join('');
+	const rows = group.rows.filter(Boolean).map(([label, value]) => `<div class="measure-row"><span>${label}</span><span>${value}</span></div>`).join('');
 	return `<div class="measure-group"><h3>${group.title}</h3>${rows}</div>`;
 }
 
@@ -1359,6 +1389,7 @@ function updateMeasurements() {
 		const floor = isFloorMirror(mirror);
 		groups.push({ title: mirrorName(mirror), rows: [
 			['Mounting', floor ? 'floor stand' : 'hanging from the truss'],
+			twinOf(mirror) ? ['Paired with', `${mirrorName(twinOf(mirror))}, mirrored across x = 0`] : null,
 			['Centre height', metres(mirror.y)],
 			['Lowest / highest edge', `${fmt(Math.min(...heights))} / ${fmt(Math.max(...heights))} m`],
 			floor ? ['Clearance over the floor', metres(Math.min(...heights))] : ['Clearance over raised hands', metres(Math.min(...heights) - (venue.headHeight + ARMS_UP))],
@@ -1590,6 +1621,63 @@ function renderProps() {
 		help.textContent = 'Throw ratio = afstand ÷ beeldbreedte. Zoek de projector op die ratio uit; de worphoek volgt eruit.';
 		propsEl.append(help);
 	}
+	if (type === 'mirror') renderSymmetry(data);
+}
+
+function renderSymmetry(mirror) {
+	// Pairing: a mirror on the other side of the room that stays an exact reflection of this one
+	const heading = document.createElement('div');
+	heading.className = 'prop-section';
+	heading.textContent = 'Symmetry';
+	const help = document.createElement('p');
+	help.className = 'prop-help';
+	const row = document.createElement('div');
+	row.className = 'side-row';
+	const twin = twinOf(mirror);
+	if (twin) {
+		help.textContent = `Gekoppeld aan ${mirrorName(twin)}: wat je bij de een aanpast, volgt de ander precies gespiegeld over de middenlijn (x = 0).`;
+		row.innerHTML = '<button class="btn" data-symmetry="unpair">Unpair</button>';
+	} else {
+		help.textContent = `Koppel een spiegel aan de andere kant van de zaal. Die springt naar het exacte spiegelbeeld van ${mirrorName(mirror)} over de middenlijn (x = 0) en blijft dat volgen.`;
+		const partners = state.setup.mirrors.filter((other) => other !== mirror && !other.twin);
+		row.innerHTML = partners.map((other) => `<button class="btn" data-symmetry="pair" data-partner="${other.id}">Pair with ${mirrorName(other)}</button>`).join('')
+			+ '<button class="btn" data-symmetry="copy">Add mirrored copy</button>';
+	}
+	propsEl.append(heading, help, row);
+}
+
+/**
+ * Links two mirrors; the partner jumps to the reflection of the source.
+ * Pair object: { source, partner }
+ */
+function pairMirrors(pair) {
+	const { source, partner } = pair;
+	source.twin = partner.id;
+	partner.twin = source.id;
+	mirrorTwin(source);
+	if (!isFloorMirror(partner)) autoMounts({ mirrors: [partner], keep: true });
+	refresh({ mirrors: true });
+	renderProps();
+}
+
+function symmetryAction(button) {
+	const source = selectedMirror();
+	if (!source) return;
+	if (button.dataset.symmetry === 'unpair') {
+		const twin = twinOf(source);
+		delete source.twin;
+		if (twin) delete twin.twin;
+		refresh({});
+		renderProps();
+		return;
+	}
+	if (button.dataset.symmetry === 'pair') {
+		pairMirrors({ source, partner: state.setup.mirrors.find((item) => item.id === button.dataset.partner) });
+		return;
+	}
+	const copy = { ...source, id: nextMirrorId() };
+	state.setup.mirrors.push(copy);
+	pairMirrors({ source, partner: copy });
 }
 
 function updatePropInputs() {
@@ -1626,6 +1714,11 @@ propsEl.addEventListener('change', (event) => {
 });
 
 propsEl.addEventListener('click', (event) => {
+	const symmetryButton = event.target.closest('[data-symmetry]');
+	if (symmetryButton) {
+		symmetryAction(symmetryButton);
+		return;
+	}
 	const button = event.target.closest('[data-choice]');
 	if (!button) return;
 	const { type, data } = selectionData();
@@ -1962,6 +2055,9 @@ function deleteSelectedMirror() {
 	// Move the selection off the mirror before it disappears, the panel reads from it
 	select('projector');
 	state.setup.mirrors = state.setup.mirrors.filter((item) => item !== mirror);
+	state.setup.mirrors.forEach((item) => {
+		if (item.twin === mirror.id) delete item.twin;
+	});
 	refresh({ mirrors: true });
 }
 
@@ -2029,6 +2125,8 @@ window.addEventListener('keydown', (event) => {
 function refresh(scope) {
 	// Scope object: which parts need rebuilding ({ venue, truss, mirrors, dj }); optics always update
 	// skipSave leaves localStorage alone, so an untouched setup keeps following the default
+	const edited = selectedMirror();
+	if (edited) mirrorTwin(edited);
 	if (scope.venue) buildVenue();
 	if (scope.truss) buildTruss();
 	if (scope.mirrors) buildMirrors();

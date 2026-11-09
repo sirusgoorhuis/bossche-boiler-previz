@@ -57,20 +57,22 @@ const DEFAULT_SETUP = {
 			"yaw": 90,
 			"roll": 90,
 			"panel": 1,
-			"id": "m1"
+			"id": "m1",
+			"twin": "m2"
 		},
 		{
 			"mount": "floor",
-			"x": -3.45,
+			"x": -3.4,
 			"y": 2.5,
-			"z": -4.15,
+			"z": -4.2,
 			"w": 3,
 			"d": 1,
 			"tilt": 0,
-			"yaw": 90,
-			"roll": 90,
+			"yaw": -90,
+			"roll": -90,
 			"panel": 1,
-			"id": "m2"
+			"id": "m2",
+			"twin": "m1"
 		}
 	],
 	"mounts": []
