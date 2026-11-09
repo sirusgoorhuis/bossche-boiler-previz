@@ -5,7 +5,8 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
-const STORAGE_KEY = 'bb-configurator-v1';
+// v2 since the house default replaced the Previz setup; v1 saves held the old default
+const STORAGE_KEY = 'bb-configurator-v2';
 const DEG = Math.PI / 180;
 const IMAGE_ASPECT = 16 / 9;
 const MOUNT_SPACING = 0.5;
@@ -179,8 +180,8 @@ function aimAngles(points) {
 	};
 }
 
-function defaultSetup() {
-	// Starts from the dimensions exported by the TouchDesigner Previz (spec.js)
+function previzSetup() {
+	// The dimensions exported by the TouchDesigner Previz (spec.js)
 	// spec.js declares SPEC with const, so it is a global name but not a window property
 	const spec = SPEC;
 	const projectorPos = spec.projector_pos;
@@ -194,6 +195,11 @@ function defaultSetup() {
 		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
 		mounts: null,
 	};
+}
+
+function defaultSetup() {
+	// The default chosen in the configurator (default-setup.js); the Previz values fill anything it leaves out
+	return mergeSetup({ base: previzSetup(), incoming: DEFAULT_SETUP });
 }
 
 function loadSetup() {
@@ -226,7 +232,7 @@ function mergeSetup(setups) {
 		id: mirror.id || `m${index + 1}`,
 		mount: mirror.mount === 'floor' ? 'floor' : 'truss',
 	}));
-	merged.mounts = Array.isArray(incoming.mounts) ? incoming.mounts : null;
+	merged.mounts = Array.isArray(incoming.mounts) ? [...incoming.mounts] : null;
 	return merged;
 }
 
@@ -794,7 +800,7 @@ function buildMirrors() {
 }
 
 function buildDevice(device) {
-	// Small projector or camera body with its lens facing -Z; device object: { group, size, colour, name, tagBelow }
+	// Small projector or camera body with its lens facing -Z; device object: { group, size, colour, name }
 	clearGroup(device.group);
 	const [w, h, d] = device.size;
 	const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material({ color: device.colour, metalness: 0.3, roughness: 0.4 }));
@@ -803,8 +809,10 @@ function buildDevice(device) {
 	lens.position.set(0, 0, -d / 2 - 0.03);
 	device.group.add(body, lens);
 	const tag = nameTag(device.name);
-	tag.position.set(0, device.tagBelow ? -h / 2 - 0.3 : h / 2 + 0.3, 0);
 	device.group.add(tag);
+	// syncTransforms puts the label above or below the body
+	device.group.userData.tag = tag;
+	device.group.userData.tagOffset = h / 2 + 0.3;
 }
 
 function buildDj() {
@@ -845,6 +853,10 @@ function syncTransforms() {
 		group.position.set(device.x, device.y, device.z);
 		group.rotation.set(device.pitch * DEG, device.yaw * DEG, device.roll * DEG, 'YXZ');
 	});
+	// Projector and camera usually sit close together: the higher one gets its label above, the other below
+	const cameraHigher = setup.camera.y > setup.projector.y;
+	parts.projector.userData.tag.position.y = (cameraHigher ? -1 : 1) * parts.projector.userData.tagOffset;
+	parts.camera.userData.tag.position.y = (cameraHigher ? 1 : -1) * parts.camera.userData.tagOffset;
 	if (parts.dj !== dragged) {
 		parts.dj.position.set(setup.dj.x, 0, setup.dj.z);
 		parts.dj.rotation.set(0, setup.dj.yaw * DEG, 0);
@@ -1697,11 +1709,14 @@ document.getElementById('btnDeleteAll').addEventListener('click', () => {
 });
 
 document.getElementById('btnReset').addEventListener('click', () => {
-	if (!window.confirm('Alle wijzigingen terugzetten naar de previz-opstelling?')) return;
+	if (!window.confirm('Alle wijzigingen terugzetten naar de standaardopstelling?')) return;
+	// Forget the saved setup, so this browser follows the default again when it changes
+	clearTimeout(saveTimer);
+	localStorage.removeItem(STORAGE_KEY);
 	state.setup = defaultSetup();
-	refresh({ venue: true, truss: true, mirrors: true, dj: true });
+	refresh({ venue: true, truss: true, mirrors: true, dj: true, skipSave: true });
 	select('projector');
-	showToast('Teruggezet naar de previz');
+	showToast('Teruggezet naar de standaardopstelling');
 });
 
 document.getElementById('btnExport').addEventListener('click', () => {
@@ -1744,6 +1759,7 @@ window.addEventListener('keydown', (event) => {
 
 function refresh(scope) {
 	// Scope object: which parts need rebuilding ({ venue, truss, mirrors, dj }); optics always update
+	// skipSave leaves localStorage alone, so an untouched setup keeps following the default
 	if (scope.venue) buildVenue();
 	if (scope.truss) buildTruss();
 	if (scope.mirrors) buildMirrors();
@@ -1762,7 +1778,7 @@ function refresh(scope) {
 		updateSelectionBox();
 	}
 	applyToggles();
-	saveSoon();
+	if (!scope.skipSave) saveSoon();
 }
 
 // Render loop
@@ -1794,8 +1810,8 @@ function animate() {
 }
 
 buildDevice({ group: parts.projector, size: [0.5, 0.22, 0.42], colour: 0xcdb8ff, name: 'Projector' });
-buildDevice({ group: parts.camera, size: [0.16, 0.12, 0.24], colour: 0xe8e8ee, name: 'Camera', tagBelow: true });
-refresh({ venue: true, truss: true, mirrors: true, dj: true });
+buildDevice({ group: parts.camera, size: [0.16, 0.12, 0.24], colour: 0xe8e8ee, name: 'Camera' });
+refresh({ venue: true, truss: true, mirrors: true, dj: true, skipSave: true });
 select('projector');
 resize();
 renderer.setAnimationLoop(animate);
