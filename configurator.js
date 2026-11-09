@@ -31,7 +31,9 @@ const SAME_RIG_ANGLE = 15;
 const SHORT_SLING = 0.75;
 const FLOOR_MIRROR_HEIGHT = 0.6;
 const FLOOR_CLEARANCE = 0.15;
-const MIRROR_DEFAULTS = { mount: 'truss', x: 0, y: 4.5, z: 0, w: 2, d: 1.5, tilt: 0, yaw: 0, roll: 0, panel: 1 };
+// Mirror orientation is where the reflective face points: yaw is the compass direction (0 = towards the projector side, +z),
+// elevation goes from -90 (straight down) through 0 (upright) to 90 (straight up), spin turns the panel around its centre
+const MIRROR_DEFAULTS = { mount: 'truss', x: 0, y: 4.5, z: 0, w: 2, d: 1.5, yaw: 0, elevation: -90, spin: 0, panel: 1 };
 const WHOLE_NUMBER_KEYS = new Set(['crowdCount', 'crossbeams']);
 const EFFECT_CLIP = 'media/undermirror_projection_fx.mp4';
 const ORTHO_HEIGHT = 20;
@@ -126,9 +128,9 @@ const FIELDS = {
 		{ key: 'd', label: 'Depth', unit: 'm', step: 0.1, min: 0.2 },
 		{ key: 'panel', label: 'Panel size', unit: 'm', step: 0.1, min: 0.2 },
 		{ section: 'Orientation' },
-		{ key: 'tilt', label: 'Tilt towards projector', unit: '°', step: 1 },
-		{ key: 'yaw', label: 'Rotation', unit: '°', step: 1 },
-		{ key: 'roll', label: 'Roll', unit: '°', step: 1 },
+		{ key: 'yaw', label: 'Facing', unit: '°', step: 1 },
+		{ key: 'elevation', label: 'Up / down', unit: '°', step: 1, min: -90, max: 90 },
+		{ key: 'spin', label: 'Spin', unit: '°', step: 1 },
 	],
 	dj: [
 		{ section: 'Position' },
@@ -204,7 +206,8 @@ function previzSetup() {
 		truss: { x: 0, z: 0, w: round(spec.truss.hx * 2, 2), d: round(spec.truss.hz * 2, 2), height: spec.truss.frameY, size: spec.truss.size, crossbeams: 0, towers: true },
 		projector: { x: projectorPos[0], y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: spec.projector_fov, lumens: 10000 },
 		camera: { enabled: true, x: round(projectorPos[0] + 0.45, 2), y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: 60 },
-		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], tilt: spec.mirror_tilt, yaw: 0, roll: 0, panel: spec.mirror_panel }],
+		// The Previz mirror faces down and tilts towards the projector
+		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], yaw: 0, elevation: spec.mirror_tilt - 90, spin: 0, panel: spec.mirror_panel }],
 		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
 		mounts: null,
 	};
@@ -241,7 +244,7 @@ function mergeSetup(setups) {
 	// An empty mirror list is a valid setup, so only a missing list falls back to the defaults
 	merged.mirrors = (Array.isArray(incoming.mirrors) ? incoming.mirrors : base.mirrors).map((mirror, index) => ({
 		...MIRROR_DEFAULTS,
-		...mirror,
+		...migrateMirror(mirror),
 		id: mirror.id || `m${index + 1}`,
 		mount: mirror.mount === 'floor' ? 'floor' : 'truss',
 	}));
@@ -285,13 +288,26 @@ function isFloorMirror(mirror) {
 	return mirror.mount === 'floor';
 }
 
+function migrateMirror(mirror) {
+	// Older setups stored tilt, yaw and roll around a mirror lying flat (face down when hanging, face up on a stand).
+	// Those angles stopped matching their names once a mirror stood upright, so they convert to facing, up / down and spin.
+	if (typeof mirror.tilt !== 'number' || typeof mirror.elevation === 'number') return mirror;
+	const face = mirror.mount === 'floor' ? 1 : -1;
+	const old = new THREE.Quaternion().setFromEuler(new THREE.Euler(face * mirror.tilt * DEG, (mirror.yaw || 0) * DEG, (mirror.roll || 0) * DEG, 'YXZ'));
+	// In the old frame the new axes were: width X, height along the old depth axis, face normal along old Y
+	const basis = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, -face), new THREE.Vector3(0, face, 0));
+	const euler = new THREE.Euler().setFromQuaternion(old.multiply(new THREE.Quaternion().setFromRotationMatrix(basis)), 'YXZ');
+	const { tilt, roll, ...rest } = mirror;
+	return { ...rest, yaw: round(euler.y / DEG, 1) || 0, elevation: round(-euler.x / DEG, 1) || 0, spin: round(euler.z / DEG, 1) || 0 };
+}
+
 function twinOf(mirror) {
 	return mirror.twin ? state.setup.mirrors.find((item) => item.id === mirror.twin) || null : null;
 }
 
 function mirrorTwin(source) {
 	// Makes the paired mirror an exact reflection of this one across the centre line of the room (x = 0):
-	// x flips, rotation and roll turn the other way, everything else stays the same
+	// x flips, facing and spin turn the other way, everything else stays the same
 	const twin = twinOf(source);
 	if (!twin) return;
 	const becameHanging = isFloorMirror(twin) && !isFloorMirror(source);
@@ -303,9 +319,9 @@ function mirrorTwin(source) {
 		w: source.w,
 		d: source.d,
 		panel: source.panel,
-		tilt: source.tilt,
 		yaw: round(-source.yaw, 1) || 0,
-		roll: round(-source.roll, 1) || 0,
+		elevation: source.elevation,
+		spin: round(-source.spin, 1) || 0,
 		twin: source.id,
 	});
 	if (becameHanging) autoMounts({ mirrors: [twin], keep: true });
@@ -333,14 +349,9 @@ function selectionData() {
 
 // Geometry helpers shared by the scene and the optics
 
-function mirrorFace(mirror) {
-	// Side of the mirror group (local Y) that reflects: down when hanging, up on a floor stand
-	return isFloorMirror(mirror) ? 1 : -1;
-}
-
 function mirrorEuler(mirror) {
-	// A positive tilt always turns the reflective face towards the projector (+Z), like the TouchDesigner Previz
-	return new THREE.Euler(mirrorFace(mirror) * mirror.tilt * DEG, mirror.yaw * DEG, mirror.roll * DEG, 'YXZ');
+	// The face looks along local +Z: facing turns it around the vertical, up / down tips it, spin turns it around itself
+	return new THREE.Euler(-mirror.elevation * DEG, mirror.yaw * DEG, mirror.spin * DEG, 'YXZ');
 }
 
 function mirrorFrame(mirror) {
@@ -348,9 +359,9 @@ function mirrorFrame(mirror) {
 	return {
 		id: mirror.id,
 		center: new THREE.Vector3(mirror.x, mirror.y, mirror.z),
-		normal: new THREE.Vector3(0, mirrorFace(mirror), 0).applyQuaternion(quaternion),
+		normal: new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion),
 		axisU: new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion),
-		axisV: new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion),
+		axisV: new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion),
 		halfU: mirror.w / 2,
 		halfV: mirror.d / 2,
 		quaternion,
@@ -857,8 +868,7 @@ function buildMirror(mirror) {
 	const group = new THREE.Group();
 	group.rotation.order = 'YXZ';
 	group.userData.select = `mirror:${mirror.id}`;
-	// The reflective face points along local Y by `face`; backing and outline sit behind it
-	const face = mirrorFace(mirror);
+	// The panel lies in local XY with its reflective face towards +Z; backing and outline sit behind it
 	const size = new THREE.Vector2();
 	renderer.getDrawingBufferSize(size);
 	const reflector = new Reflector(new THREE.PlaneGeometry(mirror.w, mirror.d), {
@@ -867,17 +877,15 @@ function buildMirror(mirror) {
 		textureHeight: Math.max(256, Math.round(size.y * 0.6)),
 		color: 0xb9c3cf,
 	});
-	reflector.rotation.x = -face * Math.PI / 2;
 	group.add(reflector);
 	// Reflector only clips correctly for a perspective camera, so isometric mode shows a plain mirror face instead
 	const flat = new THREE.Mesh(new THREE.PlaneGeometry(mirror.w, mirror.d), mirrorFaceMaterial);
-	flat.rotation.x = reflector.rotation.x;
 	group.add(flat);
 	group.userData.reflector = reflector;
 	group.userData.flat = flat;
 	showMirrorFace(group);
-	const backing = new THREE.Mesh(new THREE.BoxGeometry(mirror.w, 0.025, mirror.d), material({ color: 0x3a3a46, roughness: 0.7 }));
-	backing.position.y = -face * 0.016;
+	const backing = new THREE.Mesh(new THREE.BoxGeometry(mirror.w, mirror.d, 0.025), material({ color: 0x3a3a46, roughness: 0.7 }));
+	backing.position.z = -0.016;
 	group.add(backing);
 
 	// Panel seams on the mirror face
@@ -886,20 +894,20 @@ function buildMirror(mirror) {
 	const rows = Math.max(1, Math.round(mirror.d / mirror.panel));
 	for (let i = 1; i < columns; i += 1) {
 		const x = -mirror.w / 2 + (mirror.w * i) / columns;
-		seams.push(x, face * 0.002, -mirror.d / 2, x, face * 0.002, mirror.d / 2);
+		seams.push(x, -mirror.d / 2, 0.002, x, mirror.d / 2, 0.002);
 	}
 	for (let j = 1; j < rows; j += 1) {
-		const z = -mirror.d / 2 + (mirror.d * j) / rows;
-		seams.push(-mirror.w / 2, face * 0.002, z, mirror.w / 2, face * 0.002, z);
+		const y = -mirror.d / 2 + (mirror.d * j) / rows;
+		seams.push(-mirror.w / 2, y, 0.002, mirror.w / 2, y, 0.002);
 	}
 	const seamGeometry = new THREE.BufferGeometry();
 	seamGeometry.setAttribute('position', new THREE.Float32BufferAttribute(seams, 3));
 	group.add(new THREE.LineSegments(seamGeometry, new THREE.LineBasicMaterial({ color: 0x0c0c10 })));
-	const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(mirror.w, 0.03, mirror.d)), new THREE.LineBasicMaterial({ color: COLORS.beamOut, transparent: true, opacity: 0.7 }));
-	outline.position.y = -face * 0.012;
+	const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(mirror.w, mirror.d, 0.03)), new THREE.LineBasicMaterial({ color: COLORS.beamOut, transparent: true, opacity: 0.7 }));
+	outline.position.z = -0.012;
 	group.add(outline);
 	const tag = nameTag(mirrorName(mirror));
-	tag.position.set(-mirror.w / 2, 0.35, -mirror.d / 2);
+	tag.position.set(-mirror.w / 2, mirror.d / 2 + 0.25, 0);
 	group.add(tag);
 	parts.mirrors.add(group);
 	mirrorObjects.set(mirror.id, group);
@@ -1460,7 +1468,7 @@ function exportData() {
 	const extraMirrors = hanging.length - 1;
 	if (extraMirrors > 0) notes.push(`The TouchDesigner Previz has one mirror; ${mirrorName(mirror)} is exported, the other hanging ${extraMirrors === 1 ? 'mirror is' : `${extraMirrors} mirrors are`} in "setup".`);
 	if (floorMirrors.length) notes.push(`The Previz has no floor mirrors; ${floorMirrors.map(mirrorName).join(', ')} ${floorMirrors.length === 1 ? 'is' : 'are'} only in "setup".`);
-	if (mirror && (Math.abs(mirror.yaw) > 0.05 || Math.abs(mirror.roll) > 0.05)) notes.push(`The Previz mirror only tilts; rotation and roll of ${mirrorName(mirror)} are not exported.`);
+	if (mirror && (Math.abs(mirror.yaw) > 0.05 || Math.abs(mirror.spin) > 0.05)) notes.push(`The Previz mirror faces down and only tilts towards the projector; facing and spin of ${mirrorName(mirror)} are not exported.`);
 	const frame = mirror ? mirrorFrame(mirror) : null;
 	const halfX = frame ? Math.max(...mirrorCorners(frame).map((corner) => Math.abs(corner.x - mirror.x))) : 0;
 	const trussClear = Math.max(0, setup.truss.w / 2 - halfX - setup.truss.size / 2);
@@ -1488,7 +1496,7 @@ function exportData() {
 		notes.push('The camera is switched off, so the Previz camera parameters are left out; the projector shows its own content.');
 	}
 	if (mirror) {
-		Object.assign(previz, { Trussclear: round(trussClear, 3), Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: mirror.tilt, Mirrorpanel: mirror.panel });
+		Object.assign(previz, { Trussclear: round(trussClear, 3), Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: round(90 + mirror.elevation, 1), Mirrorpanel: mirror.panel });
 	}
 	return {
 		generator: 'Bossche Boiler setup configurator',
@@ -1621,7 +1629,13 @@ function renderProps() {
 		help.textContent = 'Throw ratio = afstand ÷ beeldbreedte. Zoek de projector op die ratio uit; de worphoek volgt eruit.';
 		propsEl.append(help);
 	}
-	if (type === 'mirror') renderSymmetry(data);
+	if (type === 'mirror') {
+		const help = document.createElement('p');
+		help.className = 'prop-help';
+		help.textContent = 'Facing: 0° kijkt naar de projectorkant, 90° naar rechts. Up / down: −90° recht omlaag, 0° rechtop, 90° recht omhoog. Spin draait de spiegel om zijn eigen midden.';
+		propsEl.querySelector('[data-key="spin"]').closest('.prop').after(help);
+		renderSymmetry(data);
+	}
 }
 
 function renderSymmetry(mirror) {
@@ -1740,6 +1754,8 @@ function setMirrorMount(mirror, mount) {
 	// Moving a mirror between the truss and the floor also moves it to a sensible height
 	if (mirror.mount === mount) return;
 	mirror.mount = mount;
+	// A flat mirror keeps facing the room: down when it hangs, up on a stand
+	if ((mount === 'floor' && mirror.elevation < -45) || (mount === 'truss' && mirror.elevation > 45)) mirror.elevation = -mirror.elevation;
 	const reach = mirrorReach(mirror);
 	if (mount === 'floor') {
 		mirror.y = round(Math.max(FLOOR_MIRROR_HEIGHT, reach.below + FLOOR_CLEARANCE), 2);
@@ -1775,8 +1791,8 @@ function configureGizmo() {
 	transform.attach(target);
 	transform.setSpace(mode === 'translate' ? 'world' : 'local');
 	transform.showX = true;
-	transform.showY = !((type === 'truss' || type === 'dj') && mode === 'translate') && mode !== 'scale';
-	transform.showZ = true;
+	transform.showY = !((type === 'truss' || type === 'dj') && mode === 'translate');
+	transform.showZ = mode !== 'scale';
 	if (type === 'dj' && mode === 'rotate') {
 		transform.showX = false;
 		transform.showZ = false;
@@ -1831,7 +1847,7 @@ function readBack(object) {
 	if (type === 'projector' || type === 'camera') {
 		Object.assign(data, { x: round(p.x, 3), y: round(Math.max(0, p.y), 3), z: round(p.z, 3), pitch: round(r.x / DEG, 1), yaw: round(r.y / DEG, 1), roll: round(r.z / DEG, 1) });
 	} else if (type === 'mirror') {
-		Object.assign(data, { x: round(p.x, 3), y: round(p.y, 3), z: round(p.z, 3), tilt: round((mirrorFace(data) * r.x) / DEG, 1), yaw: round(r.y / DEG, 1), roll: round(r.z / DEG, 1) });
+		Object.assign(data, { x: round(p.x, 3), y: round(p.y, 3), z: round(p.z, 3), yaw: round(r.y / DEG, 1) || 0, elevation: round(-r.x / DEG, 1) || 0, spin: round(r.z / DEG, 1) || 0 });
 	} else if (type === 'truss') {
 		Object.assign(data, { x: round(p.x, 3), z: round(p.z, 3) });
 		object.position.y = 0;
@@ -1848,7 +1864,7 @@ transform.addEventListener('dragging-changed', (event) => {
 		// Bake the scale into the mirror size, then rebuild it at scale 1
 		const group = mirrorObjects.get(mirror.id);
 		mirror.w = round(Math.max(0.2, mirror.w * Math.abs(group.scale.x)), 2);
-		mirror.d = round(Math.max(0.2, mirror.d * Math.abs(group.scale.z)), 2);
+		mirror.d = round(Math.max(0.2, mirror.d * Math.abs(group.scale.y)), 2);
 		refresh({ mirrors: true });
 		configureGizmo();
 	} else if (!event.value) {
@@ -2046,7 +2062,7 @@ document.getElementById('btnAddMirror').addEventListener('click', () => {
 
 document.getElementById('btnAddFloorMirror').addEventListener('click', () => {
 	const { truss, venue } = state.setup;
-	addMirror({ mount: 'floor', x: round(Math.max(-venue.floorW / 2 + 1, truss.x - truss.w / 2 - 1.2), 2), y: FLOOR_MIRROR_HEIGHT, z: round(truss.z, 2), w: 1.5, d: 1 });
+	addMirror({ mount: 'floor', x: round(Math.max(-venue.floorW / 2 + 1, truss.x - truss.w / 2 - 1.2), 2), y: FLOOR_MIRROR_HEIGHT, z: round(truss.z, 2), w: 1.5, d: 1, elevation: 0 });
 });
 
 function deleteSelectedMirror() {
