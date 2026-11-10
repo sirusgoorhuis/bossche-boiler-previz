@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -23,6 +23,7 @@
 	<a href="#werking">Werking</a>
 	<a href="#opstelling">Opstelling</a>
 	<a href="#specs">Specs</a>
+	<a href="#effecten">Effecten</a>
 	<a href="configurator.html">Configurator</a>
 </nav>
 
@@ -168,17 +169,33 @@
 		<div class="bento specs" id="specList"></div>
 	</section>
 
-	<section class="wrap split" id="effecten">
-		<div class="split-head reveal">
+	<section class="wrap" id="effecten">
+		<div class="section-head reveal">
 			<span class="tag">05 · Effecten</span>
-			<h2>Los te wisselen</h2>
+			<h2>Elk effect op groot formaat</h2>
+			<p class="section-intro">Elk effect stuurt één beeld naar de projector en luistert naar de muziek: kick, bas en BPM. Kies een effect en bekijk het beeld zelf, of van bovenaf hoe het op de dansvloer valt.</p>
 		</div>
-		<div class="split-body reveal">
-			<p>Effecten staan los van de opstelling. Elk effect krijgt hetzelfde camerabeeld en stuurt één beeld naar de projector, dus een nieuw effect plug je erin zonder aan de opstelling te komen.</p>
-			<ul class="effect-list">
-				<li><strong>Lava Blobs</strong><span>klaar</span><p>Beweging maakt een soort was die opstijgt, samensmelt en weer oplost, met de contouren van de dansers erin.</p></li>
-				<li><strong>Slot 2 t/m 4</strong><span>nog leeg</span><p>Ruimte voor ideeën uit het collectief.</p></li>
-			</ul>
+		<div class="showcase reveal">
+			<div class="bezel">
+				<div class="bezel-core stage" id="showcaseStage">
+					<video id="showcaseVideo" class="main-video" muted loop playsinline preload="none"></video>
+					<div class="stage-label" id="showcaseLabel"></div>
+				</div>
+			</div>
+			<aside class="bezel" aria-label="Effect kiezen">
+				<div class="bezel-core panel showcase-panel">
+					<h2 class="panel-title">Effect</h2>
+					<div class="grid grid-3" id="showcaseEffects"></div>
+					<h2 class="panel-title">View</h2>
+					<div class="grid grid-2" id="showcaseViews"></div>
+					<div class="showcase-info">
+						<h3 id="showcaseTitle"></h3>
+						<p id="showcaseText"></p>
+						<ul class="audio-list" id="showcaseAudio"></ul>
+						<p class="showcase-footnote">Opgenomen op een testnummer van 136 BPM. De video's hebben geen geluid.</p>
+					</div>
+				</div>
+			</aside>
 		</div>
 	</section>
 
@@ -206,6 +223,6 @@
 </footer>
 
 <script src="spec.js?v=2"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

@@ -3,10 +3,10 @@
 const DEFAULT_SETUP = {
 	"venue": {
 		"floorW": 14,
-		"floorD": 12,
+		"floorD": 15,
 		"wallH": 6,
-		"crowdW": 9,
-		"crowdD": 7,
+		"crowdW": 11,
+		"crowdD": 13.5,
 		"crowdCount": 45,
 		"headHeight": 1.7
 	},
@@ -23,14 +23,15 @@ const DEFAULT_SETUP = {
 	"projector": {
 		"x": 0,
 		"y": 5.75,
-		"z": 4.3,
+		"z": 0.55,
 		"yaw": 0,
-		"pitch": -20,
+		"pitch": -90,
 		"roll": 0,
-		"hFov": 50,
+		"hFov": 107,
 		"lumens": 10000
 	},
 	"camera": {
+		"enabled": true,
 		"x": -0.05,
 		"y": 6.15,
 		"z": 4.15,
@@ -41,39 +42,49 @@ const DEFAULT_SETUP = {
 	},
 	"dj": {
 		"x": 0,
-		"z": -5.1,
+		"z": -0.25,
 		"yaw": 0,
 		"riser": 0.4
 	},
 	"mirrors": [
 		{
-			"mount": "floor",
-			"x": 3.4,
-			"y": 2.5,
-			"z": -4.2,
-			"w": 3,
-			"d": 1,
+			"mount": "truss",
+			"x": -1.7,
+			"y": 3.5,
+			"z": 0,
+			"w": 1,
+			"d": 3,
 			"yaw": 0,
-			"elevation": 0,
-			"spin": 90,
+			"elevation": -90,
+			"spin": 0,
 			"panel": 1,
-			"id": "m1",
-			"twin": "m2"
+			"id": "m1"
 		},
 		{
-			"mount": "floor",
-			"x": -3.4,
-			"y": 2.5,
-			"z": -4.2,
-			"w": 3,
-			"d": 1,
+			"mount": "truss",
+			"x": 1.65,
+			"y": 3.5,
+			"z": 0,
+			"w": 1,
+			"d": 3,
 			"yaw": 0,
-			"elevation": 0,
-			"spin": -90,
+			"elevation": -90,
+			"spin": 0,
 			"panel": 1,
-			"id": "m2",
-			"twin": "m1"
+			"id": "m2"
 		}
 	],
-	"mounts": []
+	"motors": {
+		"enabled": true,
+		"low": 3.0,
+		"high": 5.0,
+		"speed": 0.4,
+		"pattern": "alternate",
+		"beats": 32,
+		"bpm": 128
+	},
+	"mounts": [
+		"right:6",
+		"right:9"
+	]
 };

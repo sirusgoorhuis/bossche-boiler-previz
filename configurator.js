@@ -34,7 +34,12 @@ const FLOOR_CLEARANCE = 0.15;
 // Mirror orientation is where the reflective face points: yaw is the compass direction (0 = towards the projector side, +z),
 // elevation goes from -90 (straight down) through 0 (upright) to 90 (straight up), spin turns the panel around its centre
 const MIRROR_DEFAULTS = { mount: 'truss', x: 0, y: 4.5, z: 0, w: 2, d: 1.5, yaw: 0, elevation: -90, spin: 0, panel: 1 };
-const WHOLE_NUMBER_KEYS = new Set(['crowdCount', 'crossbeams']);
+const WHOLE_NUMBER_KEYS = new Set(['crowdCount', 'crossbeams', 'beats', 'bpm']);
+// Mirror hoists: the hanging mirrors travel between a low and a high height on the beat, like the TouchDesigner Previz
+const MOTOR_DEFAULTS = { enabled: true, low: 3.0, high: 5.0, speed: 0.4, pattern: 'alternate', beats: 32, bpm: 128 };
+const MOTOR_STEP_LEVELS = [0, 0.66, 0.33, 1];
+const HOIST_CLEARANCE = 0.45;
+const MOTOR_FRAME_SECONDS = 1 / 30;
 const EFFECT_CLIP = 'media/undermirror_projection_fx.mp4';
 const ORTHO_HEIGHT = 20;
 const ORTHO_DISTANCE = 40;
@@ -132,6 +137,17 @@ const FIELDS = {
 		{ key: 'elevation', label: 'Up / down', unit: '°', step: 1, min: -90, max: 90 },
 		{ key: 'spin', label: 'Spin', unit: '°', step: 1 },
 	],
+	motors: [
+		{ key: 'enabled', label: 'Hanging mirrors on motors', type: 'check' },
+		{ section: 'Travel' },
+		{ key: 'low', label: 'Lowest height (centre)', unit: 'm', step: 0.05, min: 0.5 },
+		{ key: 'high', label: 'Highest height (centre)', unit: 'm', step: 0.05, min: 0.5 },
+		{ key: 'speed', label: 'Top speed', unit: 'm/s', step: 0.05, min: 0.05 },
+		{ section: 'Movement' },
+		{ key: 'pattern', label: 'Pattern', type: 'choice', options: [['together', 'Together'], ['alternate', 'Alternate'], ['wave', 'Wave'], ['steps', 'Steps']] },
+		{ key: 'beats', label: 'Cycle length (beats)', unit: '', step: 4, min: 4 },
+		{ key: 'bpm', label: 'BPM in the preview', unit: '', step: 1, min: 60 },
+	],
 	dj: [
 		{ section: 'Position' },
 		{ key: 'x', label: 'Left / right', unit: 'm', step: 0.05 },
@@ -150,6 +166,7 @@ const HINTS = {
 	mirror: 'W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
 	floorMirror: 'Spiegel op een vloerstatief. W verplaatsen, E kantelen, R schalen. Delete verwijdert de spiegel.',
 	dj: 'Sleep de booth over de vloer, E om te draaien.',
+	motors: 'De hangende spiegels gaan met motoren op en neer tussen de laagste en hoogste stand. Zet Motors aan in de balk om ze te zien bewegen.',
 };
 
 const viewportEl = document.getElementById('viewport');
@@ -165,7 +182,9 @@ const state = {
 	setup: loadSetup(),
 	selection: 'projector',
 	mode: 'translate',
-	toggles: { snap: true, beam: true, solid: false, cameraView: true, crowd: true, labels: true },
+	toggles: { snap: true, beam: true, solid: false, cameraView: true, crowd: true, labels: true, motors: false },
+	// Live hoist heights while the motors play; null when the mirrors rest at their set height
+	motor: { beats: 0, heights: null, last: null, sinceOptics: 0 },
 	projection: 'perspective',
 	view: 'overview',
 	flight: null,
@@ -209,6 +228,7 @@ function previzSetup() {
 		// The Previz mirror faces down and tilts towards the projector
 		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], yaw: 0, elevation: spec.mirror_tilt - 90, spin: 0, panel: spec.mirror_panel }],
 		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
+		motors: { ...MOTOR_DEFAULTS },
 		mounts: null,
 	};
 }
@@ -238,7 +258,7 @@ function loadSetup() {
 function mergeSetup(setups) {
 	const { base, incoming } = setups;
 	const merged = {};
-	['venue', 'truss', 'projector', 'camera', 'dj'].forEach((key) => {
+	['venue', 'truss', 'projector', 'camera', 'dj', 'motors'].forEach((key) => {
 		merged[key] = { ...base[key], ...(incoming[key] || {}) };
 	});
 	// An empty mirror list is a valid setup, so only a missing list falls back to the defaults
@@ -343,7 +363,7 @@ function selectionData() {
 	if (mirror) {
 		return { type: 'mirror', data: mirror, name: mirrorName(mirror) };
 	}
-	const names = { venue: 'Venue', truss: 'Truss', projector: 'Projector', camera: 'Camera', dj: 'DJ booth' };
+	const names = { venue: 'Venue', truss: 'Truss', projector: 'Projector', camera: 'Camera', dj: 'DJ booth', motors: 'Mirror motors' };
 	return { type: state.selection, data: state.setup[state.selection], name: names[state.selection] };
 }
 
@@ -354,11 +374,16 @@ function mirrorEuler(mirror) {
 	return new THREE.Euler(-mirror.elevation * DEG, mirror.yaw * DEG, mirror.spin * DEG, 'YXZ');
 }
 
+function liveY(mirror) {
+	const heights = state.motor.heights;
+	return heights && heights.has(mirror.id) ? heights.get(mirror.id) : mirror.y;
+}
+
 function mirrorFrame(mirror) {
 	const quaternion = new THREE.Quaternion().setFromEuler(mirrorEuler(mirror));
 	return {
 		id: mirror.id,
-		center: new THREE.Vector3(mirror.x, mirror.y, mirror.z),
+		center: new THREE.Vector3(mirror.x, liveY(mirror), mirror.z),
 		normal: new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion),
 		axisU: new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion),
 		axisV: new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion),
@@ -999,7 +1024,7 @@ function syncTransforms() {
 	setup.mirrors.forEach((mirror) => {
 		const group = mirrorObjects.get(mirror.id);
 		if (!group || group === dragged) return;
-		group.position.set(mirror.x, mirror.y, mirror.z);
+		group.position.set(mirror.x, liveY(mirror), mirror.z);
 		group.rotation.copy(mirrorEuler(mirror));
 		group.scale.set(1, 1, 1);
 	});
@@ -1406,6 +1431,18 @@ function updateMeasurements() {
 			['Weight acrylic 3 mm / glass 4 mm', `${fmt(area * ACRYLIC_KG_PER_M2, 0)} / ${fmt(area * GLASS_KG_PER_M2, 0)} kg`],
 		] });
 	});
+	const hanging = hangingMirrors();
+	if (hanging.length) {
+		const motors = setup.motors;
+		const reach = motorReach(motors);
+		groups.push({ title: 'Mirror motors', rows: motors.enabled ? [
+			['Travel (centre height)', `${fmt(motors.low)} to ${fmt(motors.high)} m`],
+			['Full travel at top speed', `${fmt(Math.abs(motors.high - motors.low) / Math.max(motors.speed, 0.01), 1)} s`],
+			['One cycle at the preview BPM', `${fmt((motors.beats * 60) / Math.max(motors.bpm, 1), 1)} s`],
+			['Lowest edge at the bottom', metres(reach.lowest)],
+			['Highest edge at the top', metres(reach.highest)],
+		] : [['Running', 'no, the mirrors stay at their set height']] });
+	}
 	const longest = state.cables.reduce((max, cable) => Math.max(max, cable.length), 0);
 	groups.push({ title: 'Truss and rigging', rows: [
 		['Frame', `${fmt(truss.w)} × ${fmt(truss.d)} m at ${metres(truss.height)}`],
@@ -1440,6 +1477,12 @@ function collectWarnings() {
 			warnings.push(`${mirrorName(mirror)} reaches above the bottom of the truss frame.`);
 		}
 	});
+	if (hangingMirrors().length && setup.motors.enabled) {
+		const reach = motorReach(setup.motors);
+		if (setup.motors.low > setup.motors.high) warnings.push('Mirror motors: the lowest height is above the highest height.');
+		if (reach.lowest < handsUp) warnings.push(`At their lowest point the mirrors reach down to ${metres(reach.lowest)}. Raised hands reach about ${metres(handsUp)}.`);
+		if (reach.highest > setup.truss.height - setup.truss.size / 2 - HOIST_CLEARANCE) warnings.push('At their highest point the mirrors run into the hoists under the truss.');
+	}
 	if (metrics.blocked > 0.02) warnings.push(`${percent(metrics.blocked)} of the beam hits the back of a mirror.`);
 	if (!setup.mirrors.length) {
 		warnings.push('No mirrors placed yet. Add a hanging or a floor mirror under Objects.');
@@ -1455,25 +1498,72 @@ function collectWarnings() {
 	return warnings;
 }
 
+// Mirror motors
+
+/**
+ * Where a hoist wants to be right now, as a centre height.
+ * Settings object: { motors, index, count, beats }
+ */
+function motorTarget(settings) {
+	const { motors, index, count, beats } = settings;
+	let t = beats / Math.max(1, motors.beats);
+	if (motors.pattern === 'steps') {
+		// Hold a level for a quarter of the cycle, then travel to the next one
+		const level = MOTOR_STEP_LEVELS[Math.floor((t + 0.25 * index) * 4) % MOTOR_STEP_LEVELS.length];
+		return motors.low + (motors.high - motors.low) * level;
+	}
+	if (motors.pattern === 'alternate') t += 0.5 * index;
+	if (motors.pattern === 'wave') t += index / Math.max(1, count);
+	return motors.low + (motors.high - motors.low) * (0.5 - 0.5 * Math.cos(2 * Math.PI * t));
+}
+
+function motorReach(motors) {
+	// Lowest and highest mirror edge over the whole travel, for every hanging mirror
+	let lowest = Infinity;
+	let highest = -Infinity;
+	hangingMirrors().forEach((mirror) => {
+		mirrorCorners(mirrorFrame({ ...mirror, y: Math.min(motors.low, motors.high) })).forEach((corner) => { lowest = Math.min(lowest, corner.y); });
+		mirrorCorners(mirrorFrame({ ...mirror, y: Math.max(motors.low, motors.high) })).forEach((corner) => { highest = Math.max(highest, corner.y); });
+	});
+	return { lowest, highest };
+}
+
+function stepMotors(seconds) {
+	// The hoists follow their target at the top speed, like real chain motors
+	const motors = state.setup.motors;
+	const heights = state.motor.heights || (state.motor.heights = new Map());
+	state.motor.beats += (seconds * motors.bpm) / 60;
+	const hanging = hangingMirrors();
+	const maxStep = motors.speed * seconds;
+	hanging.forEach((mirror, index) => {
+		const current = heights.has(mirror.id) ? heights.get(mirror.id) : mirror.y;
+		const target = motors.enabled ? motorTarget({ motors, index, count: hanging.length, beats: state.motor.beats }) : mirror.y;
+		heights.set(mirror.id, current + Math.max(-maxStep, Math.min(maxStep, target - current)));
+	});
+}
+
+function stopMotors() {
+	// Back to the set heights, with the measurements for those
+	state.motor.heights = null;
+	state.motor.last = null;
+	refresh({ light: true, skipSave: true });
+}
+
 // Export for TouchDesigner
 
 function exportData() {
 	const { setup, metrics } = state;
-	// The TouchDesigner Previz has one hanging mirror; the first one here fills its parameters
+	// The TouchDesigner Previz has two hanging mirrors; the first two here fill Mirror and Mirror 2
 	const hanging = hangingMirrors();
 	const floorMirrors = setup.mirrors.filter(isFloorMirror);
-	const mirror = hanging[0];
+	const [mirror, second] = hanging;
 	const notes = [];
 	if (!mirror) notes.push('There is no hanging mirror, so the Previz mirror parameters are left out.');
-	const extraMirrors = hanging.length - 1;
-	if (extraMirrors > 0) notes.push(`The TouchDesigner Previz has one mirror; ${mirrorName(mirror)} is exported, the other hanging ${extraMirrors === 1 ? 'mirror is' : `${extraMirrors} mirrors are`} in "setup".`);
+	if (hanging.length > 2) notes.push(`The TouchDesigner Previz has two mirrors; ${hanging.slice(2).map(mirrorName).join(', ')} ${hanging.length === 3 ? 'is' : 'are'} only in "setup".`);
 	if (floorMirrors.length) notes.push(`The Previz has no floor mirrors; ${floorMirrors.map(mirrorName).join(', ')} ${floorMirrors.length === 1 ? 'is' : 'are'} only in "setup".`);
-	if (mirror && (Math.abs(mirror.yaw) > 0.05 || Math.abs(mirror.spin) > 0.05)) notes.push(`The Previz mirror faces down and only tilts towards the projector; facing and spin of ${mirrorName(mirror)} are not exported.`);
-	const frame = mirror ? mirrorFrame(mirror) : null;
-	const halfX = frame ? Math.max(...mirrorCorners(frame).map((corner) => Math.abs(corner.x - mirror.x))) : 0;
-	const trussClear = Math.max(0, setup.truss.w / 2 - halfX - setup.truss.size / 2);
-	if (mirror && (Math.abs(setup.truss.x - mirror.x) > 0.05 || Math.abs(setup.truss.z - mirror.z) > 0.05)) notes.push('The Previz centres the truss on the mirror; the truss offset is only in "setup".');
-	notes.push('The Previz places the DJ booth in front of the crowd area itself; the DJ position is only in "setup".');
+	hanging.slice(0, 2).forEach((item) => {
+		if (Math.abs(item.yaw) > 0.05 || Math.abs(item.spin) > 0.05) notes.push(`The Previz mirrors face down and only tilt towards the projector; facing and spin of ${mirrorName(item)} are not exported.`);
+	});
 
 	const projector = setup.projector;
 	const camera = setup.camera;
@@ -1489,6 +1579,20 @@ function exportData() {
 		Projaim: r3(metrics.aimPoint),
 		Projfov: projector.hFov,
 		Trusssize: setup.truss.size,
+		Trusswidth: setup.truss.w,
+		Trussdepth: setup.truss.d,
+		Trussheight: setup.truss.height,
+		Trussposx: setup.truss.x,
+		Trussposz: setup.truss.z,
+		Djbooth: 1,
+		Djposx: setup.dj.x,
+		Djposz: setup.dj.z,
+		Motors: setup.motors.enabled ? 1 : 0,
+		Motorlow: setup.motors.low,
+		Motorhigh: setup.motors.high,
+		Motorspeed: setup.motors.speed,
+		Motorpattern: setup.motors.pattern,
+		Motorbeats: setup.motors.beats,
 	};
 	if (camera.enabled) {
 		Object.assign(previz, { Videocam: sameRig ? 'mirror' : 'direct', Videocampos: [camera.x, camera.y, camera.z], Videocamaim: r3(metrics.cameraAim) });
@@ -1496,7 +1600,11 @@ function exportData() {
 		notes.push('The camera is switched off, so the Previz camera parameters are left out; the projector shows its own content.');
 	}
 	if (mirror) {
-		Object.assign(previz, { Trussclear: round(trussClear, 3), Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: round(90 + mirror.elevation, 1), Mirrorpanel: mirror.panel });
+		Object.assign(previz, { Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: round(90 + mirror.elevation, 1), Mirrorpanel: mirror.panel });
+	}
+	Object.assign(previz, { Mirror2: second ? 1 : 0, Mirror2pair: second && twinOf(mirror) === second ? 1 : 0 });
+	if (second) {
+		Object.assign(previz, { Mirror2pos: [second.x, second.y, second.z], Mirror2size: [second.w, second.d], Mirror2tilt: round(90 + second.elevation, 1) });
 	}
 	return {
 		generator: 'Bossche Boiler setup configurator',
@@ -1557,7 +1665,7 @@ function downloadJson(data) {
 // Panel UI
 
 function renderObjectList() {
-	const entries = [['projector', 'Projector'], ['camera', 'Camera'], ['truss', 'Truss'], ['dj', 'DJ'], ['venue', 'Venue']]
+	const entries = [['projector', 'Projector'], ['camera', 'Camera'], ['truss', 'Truss'], ['dj', 'DJ'], ['venue', 'Venue'], ['motors', 'Motors']]
 		.concat(state.setup.mirrors.map((mirror) => [`mirror:${mirror.id}`, mirrorName(mirror)]));
 	objectListEl.innerHTML = '';
 	entries.forEach(([key, label]) => {
@@ -2018,6 +2126,7 @@ document.querySelectorAll('[data-toggle]').forEach((button) => button.addEventLi
 	button.setAttribute('aria-pressed', String(state.toggles[key]));
 	// Solid changes how the optics are drawn; the setup itself stays the same, so nothing is saved
 	if (key === 'solid') refresh({ light: true, skipSave: true });
+	if (key === 'motors' && !state.toggles.motors) stopMotors();
 	applyToggles();
 	configureGizmo();
 }));
@@ -2188,7 +2297,29 @@ function resize() {
 
 new ResizeObserver(resize).observe(viewportEl);
 
+function animateMotors(now) {
+	// While Motors plays: move the hoists, the mirrors, their stands and cables, and redraw the beams a few times a second
+	if (!state.toggles.motors || transform.dragging) {
+		state.motor.last = null;
+		return;
+	}
+	const seconds = state.motor.last === null ? 0 : Math.min(0.1, (now - state.motor.last) / 1000);
+	state.motor.last = now;
+	stepMotors(seconds);
+	syncTransforms();
+	updateStands();
+	updateCables();
+	state.motor.sinceOptics += seconds;
+	if (state.motor.sinceOptics >= MOTOR_FRAME_SECONDS) {
+		state.motor.sinceOptics = 0;
+		updateOptics();
+		applyToggles();
+	}
+	if (selectionBox) selectionBox.update();
+}
+
 function animate(now) {
+	animateMotors(now);
 	updateFlight(now);
 	orbit.update();
 	if (selectionBox) selectionBox.update();

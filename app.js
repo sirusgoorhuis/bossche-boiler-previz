@@ -20,11 +20,38 @@ const LOOKS = [
 	{ key: 'worklight', label: 'Work Light', note: 'Zaallicht aan, om de opstelling zelf te zien.' },
 ];
 
+// The previz clips were recorded with Lava Blobs; the other effects open in the effects section below
 const EFFECTS = [
-	{ key: 'lavablobs', label: 'Lava Blobs', ready: true },
-	{ key: 'slot2', label: 'Slot 2', ready: false },
-	{ key: 'slot3', label: 'Slot 3', ready: false },
-	{ key: 'slot4', label: 'Slot 4', ready: false },
+	{ key: 'lavablobs', label: 'Lava Blobs', inViewer: true },
+	{ key: 'neontext', label: 'Neon Text', inShowcase: true },
+	{ key: 'pointcloud', label: 'Point Cloud', inShowcase: true },
+	{ key: 'slot4', label: 'Slot 4' },
+];
+
+const SHOWCASE = [
+	{
+		key: 'lavablobs',
+		label: 'Lava Blobs',
+		text: 'Beweging in het camerabeeld maakt een soort was die opstijgt, samensmelt en weer oplost. Wie stilstaat, zakt langzaam weg uit het beeld. Wie beweegt, snijdt er gaten in.',
+		audio: [['Kick', 'de blobs zwellen op en glanzen'], ['Bas', 'de stroming wordt onrustiger'], ['BPM', 'hoe sneller de plaat, hoe sneller de was stijgt']],
+	},
+	{
+		key: 'neontext',
+		label: 'Neon Text',
+		text: 'BOSSCHE BOILER in groene neonbuizen, in het lettertype Monoton. Elke letter zweeft los van de rest en hapert af en toe, net als een oude neonreclame. Hier is geen camera voor nodig.',
+		audio: [['Kick', 'een golf gaat door het woord, letter voor letter springt omhoog'], ['Beat', 'de letters deinen mee op de maat'], ['Bas', 'de buizen gloeien feller'], ['Drop', 'alles beweegt groter']],
+	},
+	{
+		key: 'pointcloud',
+		label: 'Point Cloud',
+		text: 'De randen van alles wat de camera ziet worden een wolk van 65.000 punten. De punten ontstaan op de contouren van de dansers en waaien daarna weg als stof. Beweegt de hele zaal, dan kiest het effect alleen de sterkste randen, zodat het beeld niet dichtslibt.',
+		audio: [['Kick', 'een stoot nieuwe punten, en de punten worden even groter'], ['BPM', 'bij een hogere BPM waaien de punten sneller weg']],
+	},
+];
+
+const SHOWCASE_VIEWS = [
+	{ key: 'effect', label: 'Effect', caption: 'Wat de projector toont' },
+	{ key: 'room', label: 'In de zaal', caption: 'Van bovenaf in de previz' },
 ];
 
 const SYNC_TOLERANCE = 0.08;
@@ -51,6 +78,9 @@ const pipButton = document.getElementById('btnPip');
 const spinSpeed = document.getElementById('spinSpeed');
 const lookNote = document.getElementById('lookNote');
 const panelButtons = [];
+const showcase = { effect: 'neontext', view: 'effect', visible: false };
+const showcaseVideo = document.getElementById('showcaseVideo');
+const showcaseButtons = [];
 
 /**
  * Builds a panel button and remembers how to tell whether it is pressed.
@@ -87,10 +117,10 @@ function buildPanel() {
 	EFFECTS.forEach((effect) => {
 		effectGrid.append(makeButton({
 			label: effect.label,
-			title: effect.ready ? effect.label : 'Nog te bouwen',
-			isDisabled: !effect.ready,
+			title: effect.inViewer ? effect.label : (effect.inShowcase ? 'Bekijk dit effect hieronder bij Effecten' : 'Nog te bouwen'),
+			isDisabled: !effect.inViewer && !effect.inShowcase,
 			isPressed: () => state.effect === effect.key,
-			onClick: () => setState({ effect: effect.key }),
+			onClick: () => (effect.inViewer ? setState({ effect: effect.key }) : openInShowcase(effect.key)),
 		}));
 	});
 
@@ -167,6 +197,101 @@ function keepEffectInSync() {
 		fxVideo.play().catch(() => {});
 	}
 	requestAnimationFrame(keepEffectInSync);
+}
+
+// Effects showcase: one large player, the effect itself or the same moment seen from above in the previz
+
+function showcaseClip() {
+	return showcase.view === 'room' ? `effect_${showcase.effect}_room` : `effect_${showcase.effect}`;
+}
+
+/**
+ * Builds a showcase button.
+ * Settings object: { label, isPressed, onClick }
+ */
+function showcaseButton(settings) {
+	const button = document.createElement('button');
+	button.className = 'btn';
+	button.textContent = settings.label;
+	button.addEventListener('click', settings.onClick);
+	showcaseButtons.push({ button, isPressed: settings.isPressed });
+	return button;
+}
+
+function buildShowcase() {
+	const effects = document.getElementById('showcaseEffects');
+	SHOWCASE.forEach((effect) => effects.append(showcaseButton({
+		label: effect.label,
+		isPressed: () => showcase.effect === effect.key,
+		onClick: () => setShowcase({ effect: effect.key }),
+	})));
+	const views = document.getElementById('showcaseViews');
+	SHOWCASE_VIEWS.forEach((view) => views.append(showcaseButton({
+		label: view.label,
+		isPressed: () => showcase.view === view.key,
+		onClick: () => setShowcase({ view: view.key }),
+	})));
+}
+
+function renderShowcase() {
+	const effect = SHOWCASE.find((item) => item.key === showcase.effect);
+	const view = SHOWCASE_VIEWS.find((item) => item.key === showcase.view);
+	showcaseButtons.forEach(({ button, isPressed }) => button.setAttribute('aria-pressed', String(isPressed())));
+	document.getElementById('showcaseLabel').textContent = `${effect.label} · ${view.caption}`;
+	document.getElementById('showcaseTitle').textContent = effect.label;
+	document.getElementById('showcaseText').textContent = effect.text;
+	const list = document.getElementById('showcaseAudio');
+	list.innerHTML = '';
+	effect.audio.forEach(([cue, response]) => {
+		const item = document.createElement('li');
+		const term = document.createElement('span');
+		term.textContent = cue;
+		item.append(term, document.createTextNode(response));
+		list.append(item);
+	});
+}
+
+function loadShowcaseClip(keepTime) {
+	// Effect and room were recorded at the same time, so switching the view keeps the moment
+	const time = keepTime ? showcaseVideo.currentTime || 0 : 0;
+	showcaseVideo.poster = `media/effect_${showcase.effect}.jpg`;
+	showcaseVideo.src = `media/${showcaseClip()}.mp4`;
+	showcaseVideo.addEventListener('loadedmetadata', () => {
+		showcaseVideo.currentTime = time % (showcaseVideo.duration || 1);
+		if (showcase.visible) showcaseVideo.play().catch(() => {});
+	}, { once: true });
+	if (showcase.visible) showcaseVideo.load();
+}
+
+function setShowcase(changes) {
+	const sameEffect = !changes.effect || changes.effect === showcase.effect;
+	Object.assign(showcase, changes);
+	renderShowcase();
+	loadShowcaseClip(sameEffect);
+}
+
+function openInShowcase(key) {
+	setShowcase({ effect: key });
+	document.getElementById('effecten').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function playShowcaseWhenVisible() {
+	// The clips are heavy: only load and play while the player is on screen
+	if (!('IntersectionObserver' in window)) {
+		showcase.visible = true;
+		showcaseVideo.preload = 'auto';
+		showcaseVideo.play().catch(() => {});
+		return;
+	}
+	new IntersectionObserver((entries) => {
+		showcase.visible = entries[0].isIntersecting;
+		if (showcase.visible) {
+			showcaseVideo.preload = 'auto';
+			showcaseVideo.play().catch(() => {});
+		} else {
+			showcaseVideo.pause();
+		}
+	}, { threshold: 0.25 }).observe(document.getElementById('showcaseStage'));
 }
 
 // Drawings
@@ -427,6 +552,10 @@ function revealOnScroll() {
 buildPanel();
 renderPanel();
 loadClip();
+buildShowcase();
+renderShowcase();
+loadShowcaseClip(false);
+playShowcaseWhenVisible();
 requestAnimationFrame(keepEffectInSync);
 drawTopView();
 drawSideView();
