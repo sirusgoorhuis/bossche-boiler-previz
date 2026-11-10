@@ -215,20 +215,22 @@ function aimAngles(points) {
 }
 
 function previzSetup() {
-	// The dimensions exported by the TouchDesigner Previz (spec.js)
+	// The setup as it is in the TouchDesigner Previz (spec.js)
 	// spec.js declares SPEC with const, so it is a global name but not a window property
 	const spec = SPEC;
-	const projectorPos = spec.projector_pos;
-	const aim = aimAngles({ from: projectorPos, to: spec.projector_aim });
+	const projector = aimAngles({ from: spec.projector.pos, to: spec.projector.aim });
+	const camera = aimAngles({ from: spec.camera.pos, to: spec.camera.aim });
+	const [projX, projY, projZ] = spec.projector.pos;
+	const [camX, camY, camZ] = spec.camera.pos;
 	return {
 		venue: { floorW: spec.floor[0], floorD: spec.floor[1], wallH: spec.wallheight, crowdW: spec.crowd_area[0], crowdD: spec.crowd_area[1], crowdCount: spec.crowd_count, headHeight: 1.7 },
-		truss: { x: 0, z: 0, w: round(spec.truss.hx * 2, 2), d: round(spec.truss.hz * 2, 2), height: spec.truss.frameY, size: spec.truss.size, crossbeams: 0, towers: true },
-		projector: { x: projectorPos[0], y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: spec.projector_fov, lumens: 10000 },
-		camera: { enabled: true, x: round(projectorPos[0] + 0.45, 2), y: projectorPos[1], z: projectorPos[2], yaw: aim.yaw, pitch: aim.pitch, roll: 0, hFov: 60 },
-		// The Previz mirror faces down and tilts towards the projector
-		mirrors: [{ id: 'm1', mount: 'truss', x: spec.mirror_center[0], y: spec.mirror_center[1], z: spec.mirror_center[2], w: spec.mirror_size[0], d: spec.mirror_size[1], yaw: 0, elevation: spec.mirror_tilt - 90, spin: 0, panel: spec.mirror_panel }],
-		dj: { x: 0, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
-		motors: { ...MOTOR_DEFAULTS },
+		truss: { x: spec.truss.center[0], z: spec.truss.center[1], w: round(spec.truss.hx * 2, 2), d: round(spec.truss.hz * 2, 2), height: spec.truss.frameY, size: spec.truss.size, crossbeams: spec.truss.crossbeams.length, towers: true },
+		projector: { x: projX, y: projY, z: projZ, yaw: projector.yaw, pitch: projector.pitch, roll: 0, hFov: spec.projector.fov, lumens: 10000 },
+		camera: { enabled: true, x: camX, y: camY, z: camZ, yaw: camera.yaw, pitch: camera.pitch, roll: 0, hFov: spec.camera.fov },
+		// The Previz mirrors face down and only tilt towards the projector
+		mirrors: spec.mirrors.map((mirror, index) => ({ id: `m${index + 1}`, mount: 'truss', x: mirror.center[0], y: mirror.center[1], z: mirror.center[2], w: mirror.size[0], d: mirror.size[1], yaw: 0, elevation: mirror.tilt - 90, spin: 0, panel: mirror.panel })),
+		dj: { x: spec.booth.x, z: spec.booth.z, yaw: 0, riser: spec.booth.riser },
+		motors: { ...MOTOR_DEFAULTS, enabled: spec.motors.enabled, low: spec.motors.low, high: spec.motors.high, speed: spec.motors.speed, pattern: spec.motors.pattern, beats: spec.motors.beats },
 		mounts: null,
 	};
 }
@@ -1551,6 +1553,15 @@ function stopMotors() {
 
 // Export for TouchDesigner
 
+function hoistSpacing(mirror) {
+	// Distance between the two mounting points that carry a mirror: the Previz hangs a hoist at each
+	const name = mirrorName(mirror);
+	const ids = [...new Set(state.cables.filter((cable) => cable.mirror === name).map((cable) => cable.mount))];
+	if (ids.length !== 2) return null;
+	const [a, b] = ids.map((id) => mountWorld(state.mountPoints.find((point) => point.id === id)));
+	return round(a.distanceTo(b), 2);
+}
+
 function exportData() {
 	const { setup, metrics } = state;
 	// The TouchDesigner Previz has two hanging mirrors; the first two here fill Mirror and Mirror 2
@@ -1584,6 +1595,7 @@ function exportData() {
 		Trussheight: setup.truss.height,
 		Trussposx: setup.truss.x,
 		Trussposz: setup.truss.z,
+		Crossbeams: setup.truss.crossbeams,
 		Djbooth: 1,
 		Djposx: setup.dj.x,
 		Djposz: setup.dj.z,
@@ -1595,10 +1607,12 @@ function exportData() {
 		Motorbeats: setup.motors.beats,
 	};
 	if (camera.enabled) {
-		Object.assign(previz, { Videocam: sameRig ? 'mirror' : 'direct', Videocampos: [camera.x, camera.y, camera.z], Videocamaim: r3(metrics.cameraAim) });
+		Object.assign(previz, { Videocam: sameRig ? 'mirror' : 'direct', Videocampos: [camera.x, camera.y, camera.z], Videocamaim: r3(metrics.cameraAim), Videocamfov: camera.hFov });
 	} else {
 		notes.push('The camera is switched off, so the Previz camera parameters are left out; the projector shows its own content.');
 	}
+	const spacing = mirror ? hoistSpacing(mirror) : null;
+	if (spacing !== null) previz.Hoistspacing = spacing;
 	if (mirror) {
 		Object.assign(previz, { Mirrorcover: 0, Mirrorpos: [mirror.x, mirror.y, mirror.z], Mirrorsize: [mirror.w, mirror.d], Mirrortilt: round(90 + mirror.elevation, 1), Mirrorpanel: mirror.panel });
 	}

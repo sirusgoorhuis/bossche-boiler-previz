@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Een spiegel boven de dansvloer · concept · Bossche Boiler collectief</title>
+<title>Spiegels boven de dansvloer · concept · Bossche Boiler collectief</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -19,19 +19,19 @@
 <nav class="island" aria-label="Secties">
 	<a class="island-brand" href="#top">Bossche Boiler</a>
 	<a href="#previz">Previz</a>
+	<a href="#effecten">Effecten</a>
 	<a href="#idee">Idee</a>
 	<a href="#werking">Werking</a>
 	<a href="#opstelling">Opstelling</a>
 	<a href="#specs">Specs</a>
-	<a href="#effecten">Effecten</a>
 	<a href="configurator.html">Configurator</a>
 </nav>
 
 <header class="hero wrap" id="top">
 	<div class="hero-text">
 		<span class="tag reveal">Bossche Boiler collectief · concept</span>
-		<h1 class="reveal">Een spiegel boven de dansvloer</h1>
-		<p class="lede reveal">Een projector schijnt via een grote spiegel op de mensen die eronder dansen. Wie omhoog kijkt, ziet de hele vloer van bovenaf, met het beeld op de mensen en zichzelf ertussen.</p>
+		<h1 class="reveal">Spiegels boven de dansvloer</h1>
+		<p class="lede reveal">Een projector in de truss schijnt recht naar beneden op de mensen die dansen. Daarboven hangen twee spiegels die op de muziek omhoog en omlaag gaan. Wie omhoog kijkt, ziet de vloer van bovenaf, met het beeld op de mensen en zichzelf ertussen.</p>
 		<a class="cta reveal" href="#previz">
 			<span>Bekijk de previz</span>
 			<span class="cta-icon" aria-hidden="true">↓</span>
@@ -39,8 +39,8 @@
 	</div>
 	<div class="hero-visual bezel reveal">
 		<div class="bezel-core">
-			<video src="media/undermirror_show.mp4" poster="media/undermirror_show.jpg" muted loop autoplay playsinline aria-label="Previz: de spiegel van onderen gezien, met het publiek erin"></video>
-			<span class="hero-caption">Under Mirror · Show</span>
+			<video src="media/hero_undermirror.mp4" poster="media/hero_undermirror.jpg" muted loop autoplay playsinline aria-label="Previz: een spiegel van onderen gezien, met het publiek en de projectie erin"></video>
+			<span class="hero-caption">Under Mirror · Slime Text</span>
 		</div>
 	</div>
 </header>
@@ -87,91 +87,9 @@
 		</aside>
 	</section>
 
-	<section class="wrap split" id="idee">
-		<div class="split-head reveal">
-			<span class="tag">01 · Het idee</span>
-			<h2>Mensen als projectiescherm</h2>
-		</div>
-		<div class="split-body reveal">
-			<p>Richt een projector op het publiek en hang een spiegel boven de mensen, zodat ze zelf deel worden van het lichtwerk. Het beeld valt op hoofden, schouders, armen en de vloer, en verandert mee met hoe er gedanst wordt.</p>
-			<p>In de spiegel zie je dat van bovenaf.</p>
-		</div>
-	</section>
-
-	<section class="wrap" id="werking">
-		<div class="section-head reveal">
-			<span class="tag">02 · Hoe het werkt</span>
-			<h2>Eén lijn, heen en terug</h2>
-		</div>
-		<ol class="bento steps">
-			<li class="bezel reveal">
-				<div class="bezel-core">
-					<span class="step-no">01</span>
-					<h3>Filmen via de spiegel</h3>
-					<p>Een camera naast de projector kijkt in de spiegel en ziet zo de dansvloer van bovenaf. Een infraroodcamera werkt het best: die ziet de mensen wel, maar de projectie niet.</p>
-				</div>
-			</li>
-			<li class="bezel reveal">
-				<div class="bezel-core">
-					<span class="step-no">02</span>
-					<h3>Het effect reageert op beweging</h3>
-					<p>TouchDesigner vergelijkt elk camerabeeld met het vorige. Waar iemand beweegt, ontstaat beeld. In het effect Lava Blobs zijn dat glanzende vloeibare vormen met de silhouetten van de dansers erin.</p>
-				</div>
-			</li>
-			<li class="bezel reveal">
-				<div class="bezel-core">
-					<span class="step-no">03</span>
-					<h3>Terug via dezelfde spiegel</h3>
-					<p>De projector staat op een standaard van 2 meter achter in de zaal en schijnt omhoog in de spiegel. Die kaatst het beeld van bovenaf op het publiek. Camera en projector kijken langs dezelfde lijn, dus het beeld komt terecht op de mensen die het maken.</p>
-				</div>
-			</li>
-			<li class="bezel reveal">
-				<div class="bezel-core">
-					<span class="step-no">04</span>
-					<h3>Jezelf terugzien</h3>
-					<p>Wie omhoog kijkt, ziet de hele vloer met het beeld erop. En zichzelf ertussen.</p>
-				</div>
-			</li>
-		</ol>
-	</section>
-
-	<section class="wrap" id="opstelling">
-		<div class="section-head reveal">
-			<span class="tag">03 · Opstelling</span>
-			<h2>Maten uit de previz</h2>
-			<p class="section-intro">Een startpunt om mee te testen. Alles kan nog schuiven.</p>
-		</div>
-		<div class="drawings">
-			<figure class="bezel reveal">
-				<div class="bezel-core">
-					<svg id="sideView" role="img" aria-label="Zijaanzicht met de lichtweg van projector via spiegel naar publiek"></svg>
-					<figcaption>Zijaanzicht met de lichtweg: projector, spiegel, publiek</figcaption>
-					<ol class="legend" id="sideLegend"></ol>
-				</div>
-			</figure>
-			<figure class="bezel figure-split reveal">
-				<div class="bezel-core">
-					<svg id="topView" role="img" aria-label="Bovenaanzicht van de opstelling"></svg>
-					<div class="figure-meta">
-						<figcaption>Bovenaanzicht</figcaption>
-						<ol class="legend" id="topLegend"></ol>
-					</div>
-				</div>
-			</figure>
-		</div>
-	</section>
-
-	<section class="wrap" id="specs">
-		<div class="section-head reveal">
-			<span class="tag">04 · Specificaties</span>
-			<h2>Wat er nodig is</h2>
-		</div>
-		<div class="bento specs" id="specList"></div>
-	</section>
-
 	<section class="wrap" id="effecten">
 		<div class="section-head reveal">
-			<span class="tag">05 · Effecten</span>
+			<span class="tag">01 · Effecten</span>
 			<h2>Elk effect op groot formaat</h2>
 			<p class="section-intro">Elk effect stuurt één beeld naar de projector en luistert naar de muziek: kick, bas en BPM. Kies een effect en bekijk het beeld zelf, of van bovenaf hoe het op de dansvloer valt.</p>
 		</div>
@@ -199,13 +117,95 @@
 		</div>
 	</section>
 
+	<section class="wrap split" id="idee">
+		<div class="split-head reveal">
+			<span class="tag">02 · Het idee</span>
+			<h2>Mensen als projectiescherm</h2>
+		</div>
+		<div class="split-body reveal">
+			<p>Een projector boven de dansvloer schijnt het beeld recht naar beneden: op hoofden, schouders, armen en de vloer. Het beeld verandert mee met hoe er gedanst wordt en met de muziek.</p>
+			<p>Twee spiegels hangen boven het publiek. Daarin zie je de vloer van bovenaf, met het beeld op de mensen en jezelf ertussen.</p>
+		</div>
+	</section>
+
+	<section class="wrap" id="werking">
+		<div class="section-head reveal">
+			<span class="tag">03 · Hoe het werkt</span>
+			<h2>Van beweging naar beeld</h2>
+		</div>
+		<ol class="bento steps">
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">01</span>
+					<h3>Een camera kijkt mee</h3>
+					<p>Een camera hoog aan de voorkant van de truss filmt de dansvloer schuin van boven. Een infraroodcamera werkt het best: die ziet de mensen wel, maar de projectie niet.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">02</span>
+					<h3>Het effect reageert op beweging en muziek</h3>
+					<p>TouchDesigner vergelijkt elk camerabeeld met het vorige. Waar iemand beweegt, ontstaat beeld. Tegelijk luistert het naar de muziek en haalt er kick, bas en BPM uit.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">03</span>
+					<h3>Recht naar beneden</h3>
+					<p>De projector hangt in het midden van de truss en schijnt recht naar beneden. Met een groothoeklens valt het beeld over bijna de hele dansvloer.</p>
+				</div>
+			</li>
+			<li class="bezel reveal">
+				<div class="bezel-core">
+					<span class="step-no">04</span>
+					<h3>Spiegels op motoren</h3>
+					<p>Twee smalle spiegels hangen aan kettingtakels onder de truss. Op de maat gaan ze om en om omhoog en omlaag. Wie omhoog kijkt, ziet de vloer met het beeld erop. En zichzelf ertussen.</p>
+				</div>
+			</li>
+		</ol>
+	</section>
+
+	<section class="wrap" id="opstelling">
+		<div class="section-head reveal">
+			<span class="tag">04 · Opstelling</span>
+			<h2>Maten uit de previz</h2>
+			<p class="section-intro">Zo staat de opstelling nu in TouchDesigner. Alles kan nog schuiven.</p>
+		</div>
+		<div class="drawings">
+			<figure class="bezel reveal">
+				<div class="bezel-core">
+					<svg id="sideView" role="img" aria-label="Zijaanzicht met projector, spiegels, camera en publiek"></svg>
+					<figcaption>Zijaanzicht: projector, spiegels op motoren en wat de camera ziet</figcaption>
+					<ol class="legend" id="sideLegend"></ol>
+				</div>
+			</figure>
+			<figure class="bezel figure-split reveal">
+				<div class="bezel-core">
+					<svg id="topView" role="img" aria-label="Bovenaanzicht van de opstelling"></svg>
+					<div class="figure-meta">
+						<figcaption>Bovenaanzicht</figcaption>
+						<ol class="legend" id="topLegend"></ol>
+					</div>
+				</div>
+			</figure>
+		</div>
+	</section>
+
+	<section class="wrap" id="specs">
+		<div class="section-head reveal">
+			<span class="tag">05 · Specificaties</span>
+			<h2>Wat er nodig is</h2>
+		</div>
+		<div class="bento specs" id="specList"></div>
+	</section>
+
 	<section class="wrap split" id="configurator">
 		<div class="split-head reveal">
 			<span class="tag">06 · Configurator</span>
 			<h2>Zelf de opstelling bouwen</h2>
 		</div>
 		<div class="split-body reveal">
-			<p>In de configurator zet je projector, camera, truss, spiegels en DJ neer in 3D, op echte maten. Je ziet waar het licht via de spiegel landt, hoeveel van het publiek het raakt en hoe lang de kabels worden. De maten gaan met één klik terug naar TouchDesigner.</p>
+			<p>In de configurator zet je projector, camera, truss, spiegels en DJ neer in 3D, op echte maten. Je ziet waar het licht landt, wat de camera ziet, hoe ver de spiegelmotoren gaan en hoe lang de kabels worden. De maten gaan met één klik terug naar TouchDesigner.</p>
 			<a class="cta" href="configurator.html">
 				<span>Open de configurator</span>
 				<span class="cta-icon" aria-hidden="true">↗</span>
@@ -222,7 +222,7 @@
 	<div class="wrap">Bossche Boiler collectief · previz gemaakt in TouchDesigner</div>
 </footer>
 
-<script src="spec.js?v=2"></script>
-<script src="app.js?v=7"></script>
+<script src="spec.js?v=3"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

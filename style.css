@@ -846,6 +846,12 @@ figcaption {
 .d-ray { stroke: var(--lilac); stroke-width: 0.045; fill: none; stroke-dasharray: 0.25 0.12; }
 .d-person { fill: rgba(255, 255, 255, 0.42); }
 .d-dim { stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.025; fill: none; }
+.d-camview { fill: rgba(255, 196, 120, 0.07); stroke: rgba(255, 196, 120, 0.4); stroke-width: 0.025; stroke-dasharray: 0.16 0.1; }
+.d-camera { fill: rgb(255, 196, 120); }
+.d-strobe { fill: #fff; }
+.d-hoist { fill: rgba(255, 255, 255, 0.75); }
+.d-cable { stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.025; }
+.d-travel { stroke: var(--cyan); stroke-width: 0.03; stroke-dasharray: 0.14 0.12; opacity: 0.6; }
 .d-marker { fill: var(--core); stroke: var(--lilac); stroke-width: 0.045; }
 .d-marker-text { fill: var(--lilac); font-family: var(--mono); font-size: 0.34px; font-weight: 500; }
 

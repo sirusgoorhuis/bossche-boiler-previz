@@ -15,7 +15,7 @@ const CAMERAS = [
 ];
 
 const LOOKS = [
-	{ key: 'show', label: 'Show', note: 'Alle lichten aan, zoals op de avond zelf.' },
+	{ key: 'show', label: 'Show', note: 'Projector en strobe, zoals op de avond zelf.' },
 	{ key: 'projection', label: 'Projection Only', note: 'Alleen de projector. Zo zie je wat het effect met het publiek doet.' },
 	{ key: 'worklight', label: 'Work Light', note: 'Zaallicht aan, om de opstelling zelf te zien.' },
 ];
@@ -38,8 +38,8 @@ const SHOWCASE = [
 	{
 		key: 'slimetext',
 		label: 'Slime Text',
-		text: 'BOSSCHE BOILER in druipende letters, gevuld met groen slijm en een tunnel van cellen die naar buiten stroomt. Om de letters golft een veld van tekens, zoals op een oud terminalscherm. Donkere gaten drijven erdoorheen. Hier is geen camera voor nodig.',
-		audio: [['Kick', 'de letters zwellen op en de tekens rond de gaten lichten op'], ['Beat', 'de tunnel in de letters stroomt op de maat naar buiten'], ['Bas', 'het slijm glanst feller en de gaten worden groter'], ['Drop', 'het slijm vult de letters verder']],
+		text: 'BOSSCHE BOILER in Rubik Mono One, een lettertype waarin elke letter even breed is. Meestal valt het woord uit elkaar: eerst één grote letter per tel, dan een paar losse letters verspreid over het beeld. Om de acht maten staat het hele woord er weer. De letters zijn om de beurt gevuld met groen slijm en een tunnel van cellen, of opgebouwd uit tekens. Hier is geen camera voor nodig.',
+		audio: [['Beat', 'elke tel een nieuwe letter of een nieuwe plek'], ['Kick', 'de letters springen op en de randen lichten op'], ['Bas', 'het slijm glanst feller en de donkere gaten tussen de tekens groeien'], ['Drop', 'meer slijm in de letters']],
 	},
 	{
 		key: 'pointcloud',
@@ -63,6 +63,9 @@ const SHOWCASE_VIEWS = [
 const SYNC_TOLERANCE = 0.08;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MARKER_RADIUS = 0.3;
+const DEG = Math.PI / 180;
+// Room the dancers leave around the DJ booth (x, z), as in the Previz
+const BOOTH_CLEARANCE = [3.0, 1.4];
 
 const state = {
 	camera: 'frontright',
@@ -309,7 +312,7 @@ function svgElement(tag, attributes) {
 }
 
 function metres(value) {
-	return `${value.toLocaleString('nl-NL', { maximumFractionDigits: 1 })} m`;
+	return `${value.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} m`;
 }
 
 function size(width, depth) {
@@ -343,132 +346,148 @@ function seededRandom(seed) {
 }
 
 function crowdPositions() {
+	// Dancers spread over the crowd area, keeping clear of the DJ booth in the middle
 	const random = seededRandom(7);
 	const [areaX, areaZ] = SPEC.crowd_area;
-	return Array.from({ length: SPEC.crowd_count }, () => [(random() - 0.5) * areaX, (random() - 0.5) * areaZ]);
+	const positions = [];
+	while (positions.length < SPEC.crowd_count) {
+		const x = (random() - 0.5) * areaX;
+		const z = (random() - 0.5) * areaZ;
+		if (Math.abs(x - SPEC.booth.x) > BOOTH_CLEARANCE[0] || Math.abs(z - SPEC.booth.z) > BOOTH_CLEARANCE[1]) positions.push([x, z]);
+	}
+	return positions;
+}
+
+function projectorFootprint(height) {
+	// Half width (x) and half depth (z) of the projected image at a height, for a projector pointing straight down
+	const [, projY] = SPEC.projector.pos;
+	const halfWidth = Math.tan((SPEC.projector.fov / 2) * DEG) * (projY - height);
+	return { halfWidth, halfDepth: halfWidth * 9 / 16 };
+}
+
+function cameraView() {
+	// The camera's centre line and the rays along the top and bottom of its picture, in the side plane (z, y)
+	const { pos, aim, fov } = SPEC.camera;
+	const pitch = Math.atan2(aim[1] - pos[1], Math.hypot(aim[0] - pos[0], aim[2] - pos[2]));
+	const halfHeight = Math.atan(Math.tan((fov / 2) * DEG) * 9 / 16);
+	return { pitch, low: pitch - halfHeight, high: pitch + halfHeight };
 }
 
 function drawTopView() {
 	const svg = document.getElementById('topView');
 	const [floorX, floorZ] = SPEC.floor;
-	svg.setAttribute('viewBox', `${-floorX / 2 - 0.6} ${-floorZ / 2 - 0.6} ${floorX + 1.2} ${floorZ + 1.9}`);
+	svg.setAttribute('viewBox', `${-floorX / 2 - 0.6} ${-floorZ / 2 - 0.6} ${floorX + 1.2} ${floorZ + 1.2}`);
 
 	svg.append(svgElement('rect', { x: -floorX / 2, y: -floorZ / 2, width: floorX, height: floorZ, class: 'd-floor' }));
 	const [areaX, areaZ] = SPEC.crowd_area;
 	svg.append(svgElement('rect', { x: -areaX / 2, y: -areaZ / 2, width: areaX, height: areaZ, class: 'd-crowd' }));
+
+	// The projected image on the floor, cut off by the walls
+	const [projX, , projZ] = SPEC.projector.pos;
+	const image = projectorFootprint(0);
+	const imageX0 = Math.max(-floorX / 2, projX - image.halfWidth);
+	const imageX1 = Math.min(floorX / 2, projX + image.halfWidth);
+	const imageZ0 = Math.max(-floorZ / 2, projZ - image.halfDepth);
+	const imageZ1 = Math.min(floorZ / 2, projZ + image.halfDepth);
+	svg.append(svgElement('rect', { x: imageX0, y: imageZ0, width: imageX1 - imageX0, height: imageZ1 - imageZ0, class: 'd-beam' }));
 	crowdPositions().forEach(([x, z]) => svg.append(svgElement('circle', { cx: x, cy: z, r: 0.15, class: 'd-person' })));
 
-	// Mirror footprint seen from above, with its panel grid
-	const xs = SPEC.mirror_corners.map((corner) => corner[0]);
-	const zs = SPEC.mirror_corners.map((corner) => corner[2]);
-	const mirror = { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
-	svg.append(svgElement('rect', { x: mirror.x0, y: mirror.z0, width: mirror.x1 - mirror.x0, height: mirror.z1 - mirror.z0, class: 'd-mirror' }));
-	const columns = Math.max(1, Math.round(SPEC.mirror_size[0] / SPEC.mirror_panel));
-	const rows = Math.max(1, Math.round(SPEC.mirror_size[1] / SPEC.mirror_panel));
-	for (let i = 1; i < columns; i += 1) {
-		const x = mirror.x0 + (mirror.x1 - mirror.x0) * i / columns;
-		svg.append(svgElement('line', { x1: x, y1: mirror.z0, x2: x, y2: mirror.z1, class: 'd-seam' }));
-	}
-	for (let i = 1; i < rows; i += 1) {
-		const z = mirror.z0 + (mirror.z1 - mirror.z0) * i / rows;
-		svg.append(svgElement('line', { x1: mirror.x0, y1: z, x2: mirror.x1, y2: z, class: 'd-seam' }));
-	}
+	// DJ booth: riser with a speaker either side
+	const { x: boothX, z: boothZ } = SPEC.booth;
+	svg.append(svgElement('rect', { x: boothX - 1.6, y: boothZ - 1, width: 3.2, height: 2, class: 'd-booth' }));
+	[-2.3, 2.3].forEach((dx) => svg.append(svgElement('rect', { x: boothX + dx - 0.35, y: boothZ - 0.05, width: 0.7, height: 0.7, class: 'd-booth' })));
+	svg.append(svgElement('circle', { cx: SPEC.booth.dj[0], cy: SPEC.booth.dj[2], r: 0.2, class: 'd-person' }));
 
-	// Truss frame with its four towers
-	const { hx, hz } = SPEC.truss;
-	const trussSize = SPEC.truss.size;
-	svg.append(svgElement('rect', { x: -hx, y: -hz, width: hx * 2, height: hz * 2, class: 'd-truss' }));
+	// Truss frame, crossbeams and the four towers
+	const { hx, hz, size: trussSize, crossbeams } = SPEC.truss;
+	const [trussX, trussZ] = SPEC.truss.center;
+	svg.append(svgElement('rect', { x: trussX - hx, y: trussZ - hz, width: hx * 2, height: hz * 2, class: 'd-truss' }));
+	crossbeams.forEach((x) => svg.append(svgElement('line', { x1: x, y1: trussZ - hz, x2: x, y2: trussZ + hz, class: 'd-truss' })));
 	[[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]].forEach(([x, z]) => {
-		svg.append(svgElement('rect', { x: x - trussSize / 2, y: z - trussSize / 2, width: trussSize, height: trussSize, class: 'd-tower' }));
+		svg.append(svgElement('rect', { x: trussX + x - trussSize / 2, y: trussZ + z - trussSize / 2, width: trussSize, height: trussSize, class: 'd-tower' }));
 	});
 
-	// DJ booth at the front
-	const boothZ = SPEC.booth.z;
-	svg.append(svgElement('rect', { x: -1.6, y: boothZ - 1, width: 3.2, height: 2, class: 'd-booth' }));
-	svg.append(svgElement('circle', { cx: SPEC.booth.dj[0], cy: SPEC.booth.dj[2], r: 0.2, class: 'd-projector' }));
+	// Mirrors with their panels, hoists and bridles
+	SPEC.mirrors.forEach((mirror) => {
+		const xs = mirror.corners.map((corner) => corner[0]);
+		const zs = mirror.corners.map((corner) => corner[2]);
+		const box = { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
+		svg.append(svgElement('rect', { x: box.x0, y: box.z0, width: box.x1 - box.x0, height: box.z1 - box.z0, class: 'd-mirror' }));
+		const panels = Math.max(1, Math.round((box.z1 - box.z0) / mirror.panel));
+		for (let i = 1; i < panels; i += 1) {
+			const z = box.z0 + (box.z1 - box.z0) * i / panels;
+			svg.append(svgElement('line', { x1: box.x0, y1: z, x2: box.x1, y2: z, class: 'd-seam' }));
+		}
+		mirror.hoists.forEach((hoist) => {
+			mirror.corners.filter((corner) => (corner[2] - mirror.center[2]) * (hoist[2] - mirror.center[2]) > 0).forEach((corner) => {
+				svg.append(svgElement('line', { x1: hoist[0], y1: hoist[2], x2: corner[0], y2: corner[2], class: 'd-cable' }));
+			});
+			svg.append(svgElement('rect', { x: hoist[0] - 0.12, y: hoist[2] - 0.12, width: 0.24, height: 0.24, class: 'd-hoist' }));
+		});
+	});
 
-	// Projector and its throw towards the mirror
-	const [projX, projY, projZ] = SPEC.projector_pos;
-	const [aimX, aimY, aimZ] = SPEC.projector_aim;
-	const throwDistance = Math.hypot(aimX - projX, aimY - projY, aimZ - projZ);
-	const halfWidth = Math.tan((SPEC.projector_fov / 2) * Math.PI / 180) * throwDistance;
-	svg.append(svgElement('polygon', { points: `${projX},${projZ} ${aimX - halfWidth},${aimZ} ${aimX + halfWidth},${aimZ}`, class: 'd-beam' }));
+	// Projector in the middle, camera and strobe on the front truss
 	svg.append(svgElement('rect', { x: projX - 0.3, y: projZ - 0.22, width: 0.6, height: 0.44, class: 'd-projector' }));
+	const [camX, , camZ] = SPEC.camera.pos;
+	const [aimX, , aimZ] = SPEC.camera.aim;
+	const heading = Math.atan2(aimX - camX, aimZ - camZ);
+	const reach = 3.2;
+	const spread = (SPEC.camera.fov / 2) * DEG;
+	const edge = (angle) => `${camX + Math.sin(heading + angle) * reach},${camZ + Math.cos(heading + angle) * reach}`;
+	svg.append(svgElement('polygon', { points: `${camX},${camZ} ${edge(-spread)} ${edge(spread)}`, class: 'd-camview' }));
+	svg.append(svgElement('rect', { x: camX - 0.22, y: camZ - 0.15, width: 0.44, height: 0.3, class: 'd-camera' }));
+	svg.append(svgElement('circle', { cx: SPEC.strobe[0] + 0.6, cy: SPEC.strobe[2], r: 0.16, class: 'd-strobe' }));
 
+	const left = SPEC.mirrors[0];
+	const mirrorGap = SPEC.mirrors.length > 1 ? Math.abs(SPEC.mirrors[1].center[0] - left.center[0]) : 0;
 	addMarkers({
 		svg,
 		legendId: 'topLegend',
 		markers: [
-			{ x: mirror.x0 + 0.55, y: mirror.z0 + 0.55, text: `Spiegel ${size(SPEC.mirror_size[0], SPEC.mirror_size[1])}, panelen van ca. ${metres(SPEC.mirror_panel)}` },
-			{ x: hx, y: 0, text: `Truss ${size(hx * 2, hz * 2)}, op vier torens` },
-			{ x: 2.3, y: boothZ, text: 'DJ-booth op een riser' },
-			{ x: projX + 0.85, y: projZ, text: `Projector en camera, ${metres(projZ)} achter het midden, ${metres(projY)} hoog` },
+			{ x: left.center[0] - left.size[0] / 2 - 0.5, y: left.center[2] + left.size[1] / 2 - 0.3, text: `${SPEC.mirrors.length === 2 ? 'Twee spiegels' : 'Spiegel'} van ${size(left.size[0], left.size[1])}${mirrorGap ? `, ${metres(mirrorGap)} uit elkaar` : ''}, elk aan twee kettingtakels` },
+			{ x: trussX + hx, y: trussZ - hz + 1.1, text: `Truss ${size(hx * 2, hz * 2)} met ${crossbeams.length} dwarsbalken, op vier torens` },
+			{ x: projX + 0.75, y: projZ - 0.75, text: `Projector in het midden; het beeld valt op ${size(imageX1 - imageX0, imageZ1 - imageZ0)} van de vloer` },
+			{ x: camX - 0.75, y: camZ + 0.55, text: 'Camera en strobe aan de voorkant van de truss' },
+			{ x: boothX - 0.6, y: boothZ - 1.45, text: 'DJ-booth midden op de vloer' },
 			{ x: areaX / 2, y: areaZ / 2, text: `Publiek op ${size(areaX, areaZ)}, ${SPEC.crowd_count} dansers` },
 			{ x: -floorX / 2, y: floorZ / 2, text: `Dansvloer ${size(floorX, floorZ)}` },
 		],
 	});
 }
 
-function reflect(vector, normal) {
-	const dot = vector[0] * normal[0] + vector[1] * normal[1];
-	return [vector[0] - 2 * dot * normal[0], vector[1] - 2 * dot * normal[1]];
-}
-
-function rotate(vector, angle) {
-	const cos = Math.cos(angle);
-	const sin = Math.sin(angle);
-	return [vector[0] * cos - vector[1] * sin, vector[0] * sin + vector[1] * cos];
-}
-
-/**
- * Follows one projector ray in the side plane (z, y): to the mirror, then reflected down to the floor.
- * Ray object: { origin, direction, mirrorPoint, normal }
- */
-function traceRay(ray) {
-	const toPlane = [ray.mirrorPoint[0] - ray.origin[0], ray.mirrorPoint[1] - ray.origin[1]];
-	const along = (toPlane[0] * ray.normal[0] + toPlane[1] * ray.normal[1]) / (ray.direction[0] * ray.normal[0] + ray.direction[1] * ray.normal[1]);
-	const hit = [ray.origin[0] + ray.direction[0] * along, ray.origin[1] + ray.direction[1] * along];
-	const bounce = reflect(ray.direction, ray.normal);
-	const toFloor = -hit[1] / bounce[1];
-	return { hit, floor: [hit[0] + bounce[0] * toFloor, 0] };
-}
-
 function drawSideView() {
 	const svg = document.getElementById('sideView');
 	const [, floorZ] = SPEC.floor;
 	const wall = SPEC.wallheight;
-	// Side view: z runs left (DJ) to right (projector), y runs up; SVG y is flipped by drawing at -y
-	svg.setAttribute('viewBox', `${-floorZ / 2 - 0.6} ${-wall - 1.25} ${floorZ + 2.4} ${wall + 1.85}`);
+	// Side view from the right: z runs from the back wall (left) to the front (right), y runs up; SVG y is flipped by drawing at -y
+	svg.setAttribute('viewBox', `${-floorZ / 2 - 0.6} ${-wall - 1.3} ${floorZ + 1.2} ${wall + 1.9}`);
+	svg.append(svgElement('line', { x1: -floorZ / 2, y1: 0, x2: floorZ / 2, y2: 0, class: 'd-floorline' }));
+	[-floorZ / 2, floorZ / 2].forEach((z) => svg.append(svgElement('line', { x1: z, y1: 0, x2: z, y2: -wall, class: 'd-dim' })));
 
-	svg.append(svgElement('line', { x1: -floorZ / 2, y1: 0, x2: floorZ / 2 + 1.4, y2: 0, class: 'd-floorline' }));
+	// Projector beam straight down; the narrow side of the picture runs along z
+	const [, projY, projZ] = SPEC.projector.pos;
+	const image = projectorFootprint(0);
+	svg.append(svgElement('polygon', { points: `${projZ},${-projY} ${projZ - image.halfDepth},0 ${projZ + image.halfDepth},0`, class: 'd-beam' }));
 
-	// Light path: projector up into the mirror, reflected down onto the crowd
-	const [, projY, projZ] = SPEC.projector_pos;
-	const [, aimY, aimZ] = SPEC.projector_aim;
-	const tilt = SPEC.mirror_tilt * Math.PI / 180;
-	const normal = [Math.sin(tilt), -Math.cos(tilt)];
-	const [, mirrorY, mirrorZ] = SPEC.mirror_center;
-	const centre = [aimZ - projZ, aimY - projY];
-	const length = Math.hypot(centre[0], centre[1]);
-	const direction = [centre[0] / length, centre[1] / length];
-	const halfAngle = Math.atan(Math.tan((SPEC.projector_fov / 2) * Math.PI / 180) * 9 / 16);
-	const edges = [-halfAngle, halfAngle].map((angle) => traceRay({ origin: [projZ, projY], direction: rotate(direction, angle), mirrorPoint: [mirrorZ, mirrorY], normal }));
-	const middle = traceRay({ origin: [projZ, projY], direction, mirrorPoint: [mirrorZ, mirrorY], normal });
-	svg.append(svgElement('polygon', { points: `${projZ},${-projY} ${edges[0].hit[0]},${-edges[0].hit[1]} ${edges[1].hit[0]},${-edges[1].hit[1]}`, class: 'd-beam' }));
-	svg.append(svgElement('polygon', { points: [edges[0].hit, edges[1].hit, edges[1].floor, edges[0].floor].map((point) => `${point[0]},${-point[1]}`).join(' '), class: 'd-beam' }));
-	svg.append(svgElement('polyline', { points: `${projZ},${-projY} ${middle.hit[0]},${-middle.hit[1]} ${middle.floor[0]},${-middle.floor[1]}`, class: 'd-ray' }));
+	// What the camera sees: from the bottom of its picture on the floor up to the back wall
+	const [, camY, camZ] = SPEC.camera.pos;
+	const view = cameraView();
+	const backZ = -floorZ / 2;
+	const floorHit = Math.max(backZ, camZ - camY / Math.tan(-view.low));
+	const wallHeight = Math.min(wall, camY + Math.tan(view.high) * (camZ - backZ));
+	svg.append(svgElement('polygon', { points: `${camZ},${-camY} ${floorHit},0 ${backZ},0 ${backZ},${-wallHeight}`, class: 'd-camview' }));
 
-	// Crowd and DJ
+	// Crowd, front and back of the booth
 	const random = seededRandom(3);
 	const [, areaZ] = SPEC.crowd_area;
-	for (let i = 0; i < 12; i += 1) {
-		const z = -areaZ / 2 + areaZ * (i + 0.5) / 12 + (random() - 0.5) * 0.3;
+	for (let i = 0; i < 16; i += 1) {
+		const z = -areaZ / 2 + areaZ * (i + 0.5) / 16 + (random() - 0.5) * 0.3;
+		if (Math.abs(z - SPEC.booth.z) < BOOTH_CLEARANCE[1]) continue;
 		const height = 1.6 + random() * 0.2;
 		svg.append(svgElement('rect', { x: z - 0.16, y: -height + 0.25, width: 0.32, height: height - 0.25, class: 'd-person' }));
 		svg.append(svgElement('circle', { cx: z, cy: -height + 0.1, r: 0.12, class: 'd-person' }));
 	}
-	const boothZ = SPEC.booth.z;
-	const riser = SPEC.booth.riser;
+	const { z: boothZ, riser } = SPEC.booth;
 	const djZ = SPEC.booth.dj[2];
 	svg.append(svgElement('rect', { x: boothZ - 1, y: -riser, width: 2, height: riser, class: 'd-booth' }));
 	svg.append(svgElement('rect', { x: boothZ + 0.15, y: -riser - 0.95, width: 0.7, height: 0.95, class: 'd-booth' }));
@@ -476,50 +495,62 @@ function drawSideView() {
 	svg.append(svgElement('circle', { cx: djZ, cy: -riser - 1.65, r: 0.12, class: 'd-person' }));
 
 	// Truss towers and frame
-	const { frameY, hz } = SPEC.truss;
-	const trussSize = SPEC.truss.size;
-	[-hz, hz].forEach((z) => svg.append(svgElement('rect', { x: z - trussSize / 2, y: -frameY - trussSize / 2, width: trussSize, height: frameY + trussSize / 2, class: 'd-truss' })));
-	svg.append(svgElement('rect', { x: -hz, y: -frameY - trussSize / 2, width: hz * 2, height: trussSize, class: 'd-truss' }));
+	const { frameY, hz, size: trussSize } = SPEC.truss;
+	const trussZ = SPEC.truss.center[1];
+	[-hz, hz].forEach((z) => svg.append(svgElement('rect', { x: trussZ + z - trussSize / 2, y: -frameY - trussSize / 2, width: trussSize, height: frameY + trussSize / 2, class: 'd-truss' })));
+	svg.append(svgElement('rect', { x: trussZ - hz, y: -frameY - trussSize / 2, width: hz * 2, height: trussSize, class: 'd-truss' }));
 
-	// Mirror as seen from the side
-	const ends = SPEC.mirror_corners.slice(1, 3);
-	svg.append(svgElement('line', { x1: ends[0][2], y1: -ends[0][1], x2: ends[1][2], y2: -ends[1][1], class: 'd-mirror' }));
+	// Mirrors (both line up in this view) with how far the motors move them, hoists and bridles
+	const mirror = SPEC.mirrors[0];
+	const halfLength = mirror.size[1] / 2;
+	const [, mirrorY, mirrorZ] = mirror.center;
+	const { low, high } = SPEC.motors;
+	[low, high].forEach((y) => svg.append(svgElement('line', { x1: mirrorZ - halfLength, y1: -y, x2: mirrorZ + halfLength, y2: -y, class: 'd-travel' })));
+	mirror.hoists.forEach((hoist) => {
+		const end = mirrorZ + Math.sign(hoist[2] - mirrorZ) * halfLength;
+		svg.append(svgElement('line', { x1: hoist[2], y1: -(hoist[1] - 0.34), x2: end, y2: -mirrorY, class: 'd-cable' }));
+		svg.append(svgElement('rect', { x: hoist[2] - 0.12, y: -hoist[1], width: 0.24, height: 0.34, class: 'd-hoist' }));
+	});
+	svg.append(svgElement('line', { x1: mirrorZ - halfLength, y1: -mirrorY, x2: mirrorZ + halfLength, y2: -mirrorY, class: 'd-mirror' }));
 
-	// Projector on its stand
-	svg.append(svgElement('line', { x1: projZ, y1: 0, x2: projZ, y2: -projY, class: 'd-dim' }));
-	svg.append(svgElement('rect', { x: projZ - 0.25, y: -projY - 0.15, width: 0.5, height: 0.3, class: 'd-projector' }));
+	// Projector under the truss, camera and strobe at the front
+	svg.append(svgElement('rect', { x: projZ - 0.25, y: -projY - 0.1, width: 0.5, height: 0.3, class: 'd-projector' }));
+	svg.append(svgElement('rect', { x: camZ - 0.2, y: -camY - 0.13, width: 0.4, height: 0.26, class: 'd-camera' }));
+	svg.append(svgElement('circle', { cx: SPEC.strobe[2], cy: -SPEC.strobe[1] + 0.25, r: 0.14, class: 'd-strobe' }));
 
-	// Markers sit just beside what they point at
-	const lowEnd = ends[1];
-	const mirrorMarkerZ = lowEnd[2] + 0.5;
-	const mirrorHeightThere = lowEnd[1] + Math.tan(tilt) * 0.5;
-	const incoming = [(projZ + middle.hit[0]) / 2, -(projY + middle.hit[1]) / 2];
 	addMarkers({
 		svg,
 		legendId: 'sideLegend',
 		markers: [
-			{ x: mirrorMarkerZ, y: -mirrorHeightThere - 0.55, text: `Spiegel, ${SPEC.mirror_tilt}° gekanteld, midden op ${metres(mirrorY)}` },
-			{ x: -hz + 1.2, y: -frameY - 0.55, text: `Truss op ${metres(frameY)}` },
-			{ x: projZ, y: -projY - 0.6, text: `Projector en camera op een standaard van ${metres(projY)}` },
-			{ x: incoming[0] + 0.45, y: incoming[1] + 0.3, text: 'Lichtweg omhoog, de spiegel in' },
-			{ x: middle.floor[0] + 0.55, y: -2.4, text: 'Van bovenaf op het publiek' },
-			{ x: djZ, y: -riser - 2.2, text: `DJ op een riser van ${Math.round(riser * 100)} cm` },
+			{ x: mirrorZ - halfLength - 0.55, y: -mirrorY, text: `Spiegels hangen plat op ${metres(mirrorY)}, de spiegelkant naar beneden` },
+			{ x: mirrorZ + halfLength + 0.55, y: -(low + high) / 2, text: `De motoren bewegen ze tussen ${metres(low)} en ${metres(high)}` },
+			{ x: -hz + 1.0, y: -frameY - 0.55, text: `Truss op ${metres(frameY)}, kettingtakels onder de dwarsbalken` },
+			{ x: projZ + 0.75, y: -projY + 0.1, text: `Projector op ${metres(projY)}, ${SPEC.projector.fov}° recht naar beneden` },
+			{ x: camZ - 0.2, y: -camY - 0.6, text: `Camera op ${metres(camY)}, ${Math.round(-view.pitch / DEG)}° naar beneden` },
+			{ x: djZ + 1.3, y: -riser - 1.9, text: `DJ midden op de vloer, op een riser van ${Math.round(riser * 100)} cm` },
 		],
 	});
 }
 
 function buildSpecs() {
 	const list = document.getElementById('specList');
-	const { frameY, hx, hz } = SPEC.truss;
-	const [, projY, projZ] = SPEC.projector_pos;
+	const { frameY, hx, hz, crossbeams } = SPEC.truss;
+	const [, projY] = SPEC.projector.pos;
+	const image = projectorFootprint(0);
+	const heads = projectorFootprint(1.7);
+	const mirror = SPEC.mirrors[0];
+	const gap = SPEC.mirrors.length > 1 ? Math.abs(SPEC.mirrors[1].center[0] - mirror.center[0]) : 0;
+	const { low, high, speed, beats } = SPEC.motors;
 	const specs = [
-		['Spiegel', `${size(SPEC.mirror_size[0], SPEC.mirror_size[1])} over de hele dansvloer, panelen van ca. ${metres(SPEC.mirror_panel)}. Midden op ${metres(SPEC.mirror_center[1])}, ${SPEC.mirror_tilt}° gekanteld naar de projector.`],
-		['Truss', `Vierkant frame van ${size(hx * 2, hz * 2)} op ${metres(frameY)} hoogte. Box truss van ${Math.round(SPEC.truss.size * 100)} cm (F34) op vier torens.`],
-		['Projector', `Op een standaard van ${metres(projY)}, ${metres(projZ)} achter het midden van de zaal. ${SPEC.projector_fov}° horizontale worp, gericht op de spiegel.`],
-		['Camera', 'Naast de projector, filmt via de spiegel. Liefst infrarood met IR-licht, dan stoort de projectie het beeld niet.'],
-		['Dansvloer', `${size(SPEC.floor[0], SPEC.floor[1])} in de previz. Publiek op ${size(SPEC.crowd_area[0], SPEC.crowd_area[1])}: ${SPEC.crowd_count} dansers op ${SPEC.bpm} BPM.`],
-		['Show-licht', `${SPEC.pars} pars aan de truss, 2 washes en een strobe, allemaal op dezelfde beat.`],
-		['DJ', `Booth op een riser van ${Math.round(SPEC.booth.riser * 100)} cm aan de voorkant. Het publiek kijkt naar de DJ.`],
+		['Spiegels', `${SPEC.mirrors.length === 2 ? 'Twee spiegels' : 'Eén spiegel'} van ${size(mirror.size[0], mirror.size[1])}, plat met de spiegelkant naar beneden${gap ? `, ${metres(gap)} uit elkaar` : ''}. Elke spiegel hangt onder een dwarsbalk van de truss.`],
+		['Spiegelmotoren', `Twee kettingtakels per spiegel, ${metres(SPEC.truss.hoist_spacing)} uit elkaar. In ${beats} tellen gaat elke spiegel één keer op en neer tussen ${metres(low)} en ${metres(high)}, de ene omhoog als de andere zakt. Hoogstens ${speed.toLocaleString('nl-NL')} m/s.`],
+		['Truss', `Vierkant frame van ${size(hx * 2, hz * 2)} op ${metres(frameY)}, met ${crossbeams.length} dwarsbalken van voor naar achter. Box truss van ${Math.round(SPEC.truss.size * 100)} cm (F34) op vier torens.`],
+		['Projector', `In het midden van de truss op ${metres(projY)}, recht naar beneden met een lens van ${SPEC.projector.fov}°. Het beeld is ${size(heads.halfWidth * 2, heads.halfDepth * 2)} op hoofdhoogte. Op de vloer is het ${size(image.halfWidth * 2, image.halfDepth * 2)}${image.halfWidth * 2 > SPEC.floor[0] ? ', iets breder dan de zaal' : ''}.`],
+		['Camera', `Aan de voorkant van de truss op ${metres(SPEC.camera.pos[1])}, ${Math.round(-cameraView().pitch / DEG)}° naar beneden, lens van ${SPEC.camera.fov}°. Liefst infrarood met IR-licht, dan stoort de projectie het beeld niet.`],
+		['Muziek', `TouchDesigner luistert naar de muziek, uit een bestand of de lijningang, en haalt er kick, bas, BPM en drops uit. Effecten, strobe en spiegelmotoren lopen op dezelfde beat.`],
+		['Licht', 'Alleen een strobe aan de voorkant van de truss, die op de kick flitst. Al het andere licht komt van de projector.'],
+		['Dansvloer', `${size(SPEC.floor[0], SPEC.floor[1])} in de previz. Publiek op ${size(SPEC.crowd_area[0], SPEC.crowd_area[1])}: ${SPEC.crowd_count} dansers. Getest op een nummer van ${SPEC.bpm} BPM.`],
+		['DJ', `Booth midden op de vloer, op een riser van ${Math.round(SPEC.booth.riser * 100)} cm. Het publiek staat eromheen.`],
 	];
 	specs.forEach(([term, description]) => {
 		const card = document.createElement('div');

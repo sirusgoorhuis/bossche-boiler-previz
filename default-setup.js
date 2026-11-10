@@ -17,13 +17,13 @@ const DEFAULT_SETUP = {
 		"d": 8.52,
 		"height": 5.98,
 		"size": 0.29,
-		"crossbeams": 0,
+		"crossbeams": 2,
 		"towers": true
 	},
 	"projector": {
 		"x": 0,
 		"y": 5.75,
-		"z": 0.55,
+		"z": 0.05,
 		"yaw": 0,
 		"pitch": -90,
 		"roll": 0,
@@ -46,10 +46,19 @@ const DEFAULT_SETUP = {
 		"yaw": 0,
 		"riser": 0.4
 	},
+	"motors": {
+		"enabled": true,
+		"low": 3,
+		"high": 5,
+		"speed": 0.4,
+		"pattern": "alternate",
+		"beats": 32,
+		"bpm": 128
+	},
 	"mirrors": [
 		{
 			"mount": "truss",
-			"x": -1.7,
+			"x": -1.8,
 			"y": 3.5,
 			"z": 0,
 			"w": 1,
@@ -62,7 +71,7 @@ const DEFAULT_SETUP = {
 		},
 		{
 			"mount": "truss",
-			"x": 1.65,
+			"x": 1.8,
 			"y": 3.5,
 			"z": 0,
 			"w": 1,
@@ -74,17 +83,12 @@ const DEFAULT_SETUP = {
 			"id": "m2"
 		}
 	],
-	"motors": {
-		"enabled": true,
-		"low": 3.0,
-		"high": 5.0,
-		"speed": 0.4,
-		"pattern": "alternate",
-		"beats": 32,
-		"bpm": 128
-	},
 	"mounts": [
 		"right:6",
-		"right:9"
+		"right:9",
+		"cross2:7",
+		"cross2:9",
+		"cross1:9",
+		"cross1:7"
 	]
 };
