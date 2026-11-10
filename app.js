@@ -23,9 +23,9 @@ const LOOKS = [
 // The previz clips were recorded with Lava Blobs; the other effects open in the effects section below
 const EFFECTS = [
 	{ key: 'lavablobs', label: 'Lava Blobs', inViewer: true },
-	{ key: 'neontext', label: 'Neon Text', inShowcase: true },
+	{ key: 'slimetext', label: 'Slime Text', inShowcase: true },
 	{ key: 'pointcloud', label: 'Point Cloud', inShowcase: true },
-	{ key: 'slot4', label: 'Slot 4' },
+	{ key: 'relocator', label: 'Pixel Relocator', inShowcase: true },
 ];
 
 const SHOWCASE = [
@@ -36,16 +36,22 @@ const SHOWCASE = [
 		audio: [['Kick', 'de blobs zwellen op en glanzen'], ['Bas', 'de stroming wordt onrustiger'], ['BPM', 'hoe sneller de plaat, hoe sneller de was stijgt']],
 	},
 	{
-		key: 'neontext',
-		label: 'Neon Text',
-		text: 'BOSSCHE BOILER in groene neonbuizen, in het lettertype Monoton. Elke letter zweeft los van de rest en hapert af en toe, net als een oude neonreclame. Hier is geen camera voor nodig.',
-		audio: [['Kick', 'een golf gaat door het woord, letter voor letter springt omhoog'], ['Beat', 'de letters deinen mee op de maat'], ['Bas', 'de buizen gloeien feller'], ['Drop', 'alles beweegt groter']],
+		key: 'slimetext',
+		label: 'Slime Text',
+		text: 'BOSSCHE BOILER in druipende letters, gevuld met groen slijm en een tunnel van cellen die naar buiten stroomt. Om de letters golft een veld van tekens, zoals op een oud terminalscherm. Donkere gaten drijven erdoorheen. Hier is geen camera voor nodig.',
+		audio: [['Kick', 'de letters zwellen op en de tekens rond de gaten lichten op'], ['Beat', 'de tunnel in de letters stroomt op de maat naar buiten'], ['Bas', 'het slijm glanst feller en de gaten worden groter'], ['Drop', 'het slijm vult de letters verder']],
 	},
 	{
 		key: 'pointcloud',
 		label: 'Point Cloud',
 		text: 'De randen van alles wat de camera ziet worden een wolk van 65.000 punten. De punten ontstaan op de contouren van de dansers en waaien daarna weg als stof. Beweegt de hele zaal, dan kiest het effect alleen de sterkste randen, zodat het beeld niet dichtslibt.',
 		audio: [['Kick', 'een stoot nieuwe punten, en de punten worden even groter'], ['BPM', 'bij een hogere BPM waaien de punten sneller weg']],
+	},
+	{
+		key: 'relocator',
+		label: 'Pixel Relocator',
+		text: 'Negen videoloops veranderen in een glanzende, gevouwen vloeistof. Elke pixel staat rechtop als een zuiltje. Hoe lichter de pixel, hoe hoger het zuiltje. Zo rekken heldere vormen uit tot strepen met zaagtanden. Waar de dansers bewegen, komt het oppervlak omhoog.',
+		audio: [['Beat', 'om de 16 tellen wisselt de videoloop'], ['Kick', 'de zuiltjes schieten verder uit en de punten lichten op'], ['Bas', 'de vloeistof golft dieper'], ['Drop', 'de kleuren schuiven verder uit elkaar']],
 	},
 ];
 
@@ -78,7 +84,7 @@ const pipButton = document.getElementById('btnPip');
 const spinSpeed = document.getElementById('spinSpeed');
 const lookNote = document.getElementById('lookNote');
 const panelButtons = [];
-const showcase = { effect: 'neontext', view: 'effect', visible: false };
+const showcase = { effect: 'slimetext', view: 'effect', visible: false };
 const showcaseVideo = document.getElementById('showcaseVideo');
 const showcaseButtons = [];
 
